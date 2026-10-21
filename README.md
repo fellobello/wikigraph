@@ -11,8 +11,7 @@ foundations at the bottom, in the style of
 The demo opens the machine-learning graph from that project (`sample-ml.json`) in 3D. Click any
 concept to see its definition, prerequisites, dependents, a learning path and a link to Wikipedia.
 [`ml.json`](ml.json) is a 413-concept graph this builder made from Wikipedia, starting at "Machine
-learning". To view it, download it and choose **Open graph…** in the explorer, or drop the file on
-the page.
+learning". [Open it in the demo](https://fellobello.github.io/wikigraph/explorer.html?graph=ml.json).
 
 ## Quick start
 
@@ -30,6 +29,26 @@ cdnjs, so it needs an internet connection. With the server running, open
 http://localhost:8000/explorer.html and choose **Open graph…**.
 
 The builder needs only Python 3.9+ and network access to `*.wikipedia.org`.
+
+## Switch topics locally
+
+`topic.py` builds a topic if it isn't built yet, then serves the folder and opens the explorer on it:
+
+```
+python3 topic.py "Cybernetics"
+```
+
+- Graphs are saved as `graphs/<slug>.json` (ignored by git). Running the same topic again opens it instantly.
+- The explorer's **Topic** menu lists every topic you've built, so you can switch without the terminal.
+  The menu only appears when the explorer runs locally.
+- `python3 topic.py --list` lists built topics. `python3 topic.py` with no topic just opens the explorer.
+- Each topic has its own curation file, `graphs/<slug>.curation.json`. Save the Review tab's output
+  there, then run `python3 topic.py "Cybernetics" --rebuild`.
+- Options after `--` go to the builder, for example `python3 topic.py "Cybernetics" --rebuild -- --max-nodes 600`.
+- The Wikipedia User-Agent contact defaults to this repository's URL. Set `WIKIGRAPH_CONTACT` or
+  `--contact` to use your own.
+
+Any graph can also be opened by URL: `explorer.html?graph=ml.json`.
 
 ## How it stays finite
 
@@ -65,7 +84,8 @@ The output is `{meta, review, nodes}`. Nodes follow the palindrome format (`id`,
 
 ## Tests
 
-`python3 -m unittest test_wikigraph` runs the full pipeline against a small fake Wikipedia.
+`python3 -m unittest test_wikigraph test_topic` runs the full pipeline against a small fake Wikipedia
+and checks the topic launcher.
 
 ## Credits
 

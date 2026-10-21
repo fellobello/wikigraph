@@ -5,3 +5,5 @@ __pycache__/
 .DS_Store
 # Source archive
 wikigraph.zip
+# Graphs built with topic.py (force-add one to share it as a demo)
+graphs/
