@@ -1,0 +1,1570 @@
+<meta charset="utf-8">
+<title>Wikigraph Explorer</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: full-height app. Canvas of horizontal strata (level 0 foundations at the bottom), side panel on the right, bottom sheet on phones. */
+:root {
+  --bg: #eef0ec;
+  --band: #e4e8e2;
+  --panel: #f8f9f6;
+  --ink: #1d2421;
+  --muted: #5d6a64;
+  --line: #9aa69f;
+  --rule: #d3d9d3;
+  --up: #c2410c;
+  --down: #0f766e;
+  --focus: #1d4ed8;
+  --cat-l: 46%;
+  --cat-s: 58%;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111614; --band: #161c19; --panel: #18201c; --ink: #e3e9e5; --muted: #93a29a;
+    --line: #5f6e66; --rule: #2a332e; --up: #fb923c; --down: #2dd4bf; --focus: #93b4ff;
+    --cat-l: 62%; --cat-s: 55%; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111614; --band: #161c19; --panel: #18201c; --ink: #e3e9e5; --muted: #93a29a;
+  --line: #5f6e66; --rule: #2a332e; --up: #fb923c; --down: #2dd4bf; --focus: #93b4ff;
+  --cat-l: 62%; --cat-s: 55%; color-scheme: dark;
+}
+html, body { height: 100%; }
+[hidden] { display: none !important; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 14px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+header {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  border-bottom: 1px solid var(--rule); background: var(--panel);
+}
+.brand { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.brand h1 { font-family: var(--display); font-weight: 700; font-size: 19px; margin: 0; letter-spacing: -0.01em; white-space: nowrap; }
+.brand .graphname { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 32ch; }
+.search { position: relative; flex: 1 1 220px; max-width: 360px; min-width: 0; }
+.search input {
+  width: 100%; box-sizing: border-box; padding: 7px 10px; border-radius: 6px;
+  border: 1px solid var(--rule); background: var(--bg);
+}
+.results {
+  position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20; background: var(--panel);
+  border: 1px solid var(--rule); border-radius: 6px; max-height: 50vh; overflow-y: auto;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+.results button { display: flex; justify-content: space-between; gap: 8px; width: 100%; text-align: left; padding: 7px 10px; background: none; border: 0; cursor: pointer; }
+.results button:hover, .results button.active { background: var(--band); }
+.results small { color: var(--muted); font-family: var(--mono); font-size: 11px; white-space: nowrap; }
+.tools { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-left: auto; }
+.tools label { display: flex; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; }
+.tools select, .btn {
+  padding: 6px 10px; border-radius: 6px; border: 1px solid var(--rule); background: var(--bg); cursor: pointer;
+}
+.btn:hover { border-color: var(--line); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+
+main { flex: 1; display: flex; min-height: 0; }
+#stage { position: relative; flex: 1; min-width: 0; touch-action: none; cursor: grab; }
+#stage.dragging { cursor: grabbing; }
+canvas { display: block; position: absolute; inset: 0; width: 100%; height: 100%; }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 6px; overflow: hidden; }
+.seg button { padding: 6px 10px; border: 0; background: var(--bg); cursor: pointer; font-weight: 700; font-size: 13px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--rule); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+#spin[aria-pressed="true"] { border-color: var(--focus); color: var(--focus); }
+#tip {
+  position: absolute; pointer-events: none; z-index: 5; background: var(--panel); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 6px 9px; font-size: 12px; max-width: 280px; box-shadow: 0 6px 18px rgb(0 0 0 / 0.15);
+}
+#tip b { display: block; font-size: 13px; }
+#tip span { display: block; color: var(--muted); font-family: var(--mono); font-size: 11px; }
+.legend {
+  position: absolute; left: max(12px, env(safe-area-inset-left, 0px)); bottom: 12px; z-index: 4;
+  display: flex; gap: 10px 14px; flex-wrap: wrap; max-width: min(640px, calc(100% - 24px));
+  background: color-mix(in srgb, var(--panel) 88%, transparent); border: 1px solid var(--rule);
+  border-radius: 6px; padding: 8px 10px; font-size: 12px;
+}
+.legend .sw { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; vertical-align: 0; }
+.legend button { background: none; border: 0; padding: 0; cursor: pointer; color: var(--ink); }
+.legend button.off { opacity: 0.35; }
+.legend .ramp { display: inline-block; width: 120px; height: 9px; border-radius: 4px; vertical-align: -1px; margin-inline: 6px; }
+.tune-wrap { position: relative; }
+.tune {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; width: 300px; box-sizing: border-box;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 8px; padding: 14px;
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.2); display: flex; flex-direction: column; gap: 12px;
+}
+.tune h4 { margin: 0; font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.tune .ctl { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; font-size: 13px; }
+.tune .ctl input[type="range"] { grid-column: 1 / -1; width: 100%; accent-color: var(--focus); }
+.tune .ctl output { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.tune .row button { flex: 1; }
+@media (max-width: 760px) { .tune { position: fixed; left: max(16px, env(safe-area-inset-left, 0px)); right: max(16px, env(safe-area-inset-right, 0px)); top: auto; width: auto; max-height: 60vh; overflow-y: auto; } }
+.overlay-note {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 4;
+  background: var(--panel); border: 1px solid var(--rule); border-radius: 999px; padding: 6px 8px 6px 14px;
+  display: flex; gap: 10px; align-items: center; font-size: 13px; max-width: calc(100% - 32px);
+}
+.overlay-note button { border-radius: 999px; }
+.drop {
+  position: absolute; inset: 0; z-index: 30; display: grid; place-items: center; background: color-mix(in srgb, var(--bg) 80%, transparent);
+  border: 3px dashed var(--focus); font-family: var(--display); font-size: 22px;
+}
+
+aside {
+  width: 380px; flex: none; display: flex; flex-direction: column; min-height: 0;
+  border-left: 1px solid var(--rule); background: var(--panel);
+}
+.tabs { display: flex; border-bottom: 1px solid var(--rule); }
+.tabs button {
+  flex: 1; padding: 10px 6px; background: none; border: 0; border-bottom: 2px solid transparent; cursor: pointer;
+  color: var(--muted); font-weight: 700; font-size: 13px;
+}
+.tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); }
+.tabs .count { font-family: var(--mono); font-weight: 400; font-size: 11px; margin-left: 4px; }
+.pane { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 18px; }
+.pane h2 { font-family: var(--display); font-size: 22px; line-height: 1.15; margin: 0; text-wrap: balance; }
+.pane h3 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 0 0 8px; font-weight: 700;
+  display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+}
+.pane p { margin: 0; line-height: 1.5; }
+.muted { color: var(--muted); }
+.mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+code.tex { font-family: var(--mono); font-size: 0.86em; background: var(--band); padding: 0 3px; border-radius: 3px; }
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 2px 8px; border-radius: 999px;
+  border: 1px solid var(--rule); background: var(--bg); white-space: nowrap;
+}
+.chip .sw { width: 8px; height: 8px; border-radius: 50%; }
+.row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.stat { display: flex; flex-direction: column; gap: 2px; }
+.stat b { font-family: var(--display); font-size: 22px; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 11px; color: var(--muted); }
+.list { display: flex; flex-direction: column; }
+.item {
+  display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 5px 4px; border-radius: 4px;
+  background: none; border: 0; text-align: left; cursor: pointer; width: 100%;
+}
+.item:hover { background: var(--band); }
+.itemrow { display: flex; align-items: center; min-width: 0; flex: 1; }
+.itemrow .item { flex: 1; min-width: 0; }
+.wk { font-family: var(--mono); font-size: 10.5px; text-decoration: none; color: var(--muted); padding: 3px 5px; border-radius: 4px; flex: none; }
+.wk:hover { color: var(--focus); background: var(--band); }
+.wikibtn { display: inline-flex; align-items: center; gap: 6px; align-self: flex-start; padding: 7px 12px; border-radius: 6px; background: var(--ink); color: var(--bg); text-decoration: none; font-weight: 700; font-size: 13px; }
+.item .n { font-family: var(--mono); font-size: 11px; color: var(--muted); min-width: 2.5ch; text-align: right; }
+.item .lbl { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.item .val { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+.bar { height: 4px; border-radius: 2px; background: var(--up); grid-column: 2 / 4; opacity: 0.8; }
+.strata { display: flex; flex-direction: column-reverse; gap: 2px; }
+.stratum { display: grid; grid-template-columns: 4ch 1fr 4ch; gap: 8px; align-items: center; background: none; border: 0; padding: 1px 2px; cursor: pointer; border-radius: 3px; }
+.stratum:hover, .stratum.on { background: var(--band); }
+.stratum i { display: block; height: 8px; border-radius: 2px; background: var(--line); }
+.stratum.on i { background: var(--focus); }
+.stratum span { font-family: var(--mono); font-size: 11px; color: var(--muted); text-align: right; }
+.formula { font-family: var(--mono); font-size: 13px; background: var(--band); padding: 10px 12px; border-radius: 6px; line-height: 1.6; overflow-x: auto; }
+.callout { border: 1px solid var(--rule); border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.toggle { display: flex; gap: 6px; }
+.toggle button { flex: 1; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--rule); background: var(--bg); cursor: pointer; font-size: 13px; }
+.toggle button[aria-pressed="true"].up { border-color: var(--up); color: var(--up); font-weight: 700; }
+.toggle button[aria-pressed="true"].down { border-color: var(--down); color: var(--down); font-weight: 700; }
+.toggle button[aria-pressed="true"].iso { border-color: var(--focus); color: var(--focus); font-weight: 700; }
+.edge-x { background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 4px; font-size: 15px; line-height: 1; }
+.edge-x:hover { color: var(--up); }
+.mini { font-size: 12px; padding: 3px 8px; border-radius: 5px; border: 1px solid var(--rule); background: var(--bg); cursor: pointer; }
+.mini:hover { border-color: var(--line); }
+.mini:disabled { opacity: 0.45; cursor: default; }
+textarea { width: 100%; box-sizing: border-box; min-height: 140px; font-family: var(--mono); font-size: 12px; background: var(--bg); border: 1px solid var(--rule); border-radius: 6px; padding: 8px; color: var(--ink); }
+.msg { font-size: 12px; color: var(--up); }
+.empty { color: var(--muted); font-style: italic; }
+details summary { cursor: pointer; font-weight: 700; font-size: 13px; }
+a { color: var(--focus); }
+
+@media (max-width: 760px) {
+  main { flex-direction: column; }
+  aside { width: auto; height: 46%; border-left: 0; border-top: 1px solid var(--rule); }
+  .tools label span { display: none; }
+  .brand .graphname { display: none; }
+  .legend { display: none; }
+  .stats { grid-template-columns: repeat(2, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<header>
+  <div class="brand"><h1>Wikigraph</h1><span class="graphname" id="graphname">Loading…</span></div>
+  <div class="search">
+    <input id="q" type="search" placeholder="Find a concept  ( / )" autocomplete="off" aria-label="Find a concept">
+    <div class="results" id="results" hidden></div>
+  </div>
+  <div class="tools">
+    <label><span>Size</span>
+      <select id="sizeMode" aria-label="Node size">
+        <option value="descendants">Dependents</option>
+        <option value="betweenness" selected>Betweenness</option>
+        <option value="pagerank">PageRank</option>
+        <option value="uniform">Uniform</option>
+      </select></label>
+    <label><span>Colour</span>
+      <select id="colorMode" aria-label="Node colour">
+        <option value="category">Category</option>
+        <option value="level">Level</option>
+        <option value="betweenness">Betweenness</option>
+      </select></label>
+    <div class="seg" role="group" aria-label="View"><button id="m2d" aria-pressed="true">2D</button><button id="m3d" aria-pressed="false">3D</button></div>
+    <button class="btn" id="spin" aria-pressed="true" hidden title="Rotate slowly">Spin</button>
+    <div class="tune-wrap">
+      <button class="btn" id="tuneBtn" aria-expanded="false" aria-controls="tune" hidden>Layout ▾</button>
+      <div class="tune" id="tune" hidden></div>
+    </div>
+    <button class="btn" id="fit" title="Fit graph to view (F)">Fit</button>
+    <button class="btn" id="openBtn">Open graph…</button>
+    <input type="file" id="file" accept=".json,application/json" hidden>
+  </div>
+</header>
+
+<main>
+  <div id="stage">
+    <canvas id="gl" hidden></canvas>
+    <canvas id="cv"></canvas>
+    <div id="tip" hidden></div>
+    <div class="overlay-note" id="isoNote" hidden></div>
+    <div class="legend" id="legend"></div>
+    <div class="drop" id="drop" hidden>Drop a graph JSON file</div>
+  </div>
+  <aside>
+    <div class="tabs" role="tablist">
+      <button role="tab" id="tab-overview" aria-selected="true" data-tab="overview">Overview</button>
+      <button role="tab" id="tab-node" aria-selected="false" data-tab="node">Concept</button>
+      <button role="tab" id="tab-review" aria-selected="false" data-tab="review">Review<span class="count" id="editCount"></span></button>
+    </div>
+    <div class="pane" id="pane"></div>
+  </aside>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+"use strict";
+// ---------------------------------------------------------------- state
+const S = {
+  base: [], meta: {}, review: null, name: "", key: "",
+  nodes: [], byId: new Map(), maxLevel: 0, categories: [],
+  sel: null, hover: null, up: null, down: null, showUp: true, showDown: true,
+  isolate: null, levelFocus: null, hiddenCats: new Set(),
+  sizeMode: "betweenness", colorMode: "category", tab: "overview", mode: "2d",
+  edits: emptyEdits(), msg: "",
+  view: { x: 0, y: 0, k: 1 }, bounds: null,
+};
+function emptyEdits() { return { exclude: [], terminal: [], add: [], remove: [], include: [], seeds: [], categories: {} }; }
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const tex = (s) => esc(s).replace(/\$\$?([^$]+?)\$\$?/g, (_, m) => `<code class="tex">${m}</code>`).replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
+const fmt = (v, d = 3) => (v == null || isNaN(v) ? "–" : v === 0 ? "0" : v < 0.001 ? v.toExponential(1) : v.toFixed(d));
+
+// ---------------------------------------------------------------- loading
+function loadGraph(raw, name) {
+  const list = Array.isArray(raw) ? raw : raw.nodes;
+  if (!Array.isArray(list) || !list.length || list[0].id == null) throw new Error("That file has no node list. Expected an array of nodes or an object with a \"nodes\" array.");
+  const ids = new Set(list.map((n) => String(n.id)));
+  const edges = new Set();
+  for (const n of list) {
+    for (const p of n.from || []) if (ids.has(String(p))) edges.add(String(p) + ">" + String(n.id));
+    for (const d of n.to || []) if (ids.has(String(d))) edges.add(String(n.id) + ">" + String(d));
+  }
+  S.base = list.map((n) => ({
+    id: String(n.id), label: n.label || n.title || String(n.id), title: n.title || null, url: n.url || null,
+    category: n.category || "Uncategorised", description: n.description || "", definition: n.definition || "",
+    long: n.long_description || "", seed: !!n._seed, expanded: n._expanded !== false, terminal: !!n._terminal,
+    fileBc: n._betweenness_centrality, filePr: n._pagerank,
+  }));
+  S.baseEdges = [...edges].map((e) => e.split(">"));
+  S.meta = Array.isArray(raw) ? {} : raw.meta || {};
+  S.review = Array.isArray(raw) ? null : raw.review || null;
+  S.name = name || S.meta.name || (S.meta.topics || []).join(", ") || "Untitled graph";
+  S.key = "wikigraph-edits:" + S.name + ":" + list.length;
+  S.edits = emptyEdits();
+  try { const saved = JSON.parse(localStorage.getItem(S.key) || "null"); if (saved) S.edits = { ...emptyEdits(), ...saved }; } catch (e) {}
+  S.sel = null; S.isolate = null; S.levelFocus = null; S.hiddenCats.clear();
+  $("graphname").textContent = S.name;
+  rebuild(true);
+  const hash = location.hash.slice(1);
+  if (hash.startsWith("n-") && S.byId.has(hash.slice(2))) select(hash.slice(2), true);
+  else setTab("overview");
+}
+
+async function loadSample() {
+  try {
+    const r = await fetch("sample-ml.json");
+    if (!r.ok) throw new Error(r.status);
+    loadGraph(await r.json());
+  } catch (e) {
+    $("graphname").textContent = "No graph loaded";
+    $("pane").innerHTML = `<h2>Open a graph to begin</h2><p class="muted">Use <b>Open graph…</b> or drop a JSON file from <code class="tex">wikigraph.py build</code> here. Files from the-palindrome/ml-knowledge-graph also load.</p>`;
+  }
+}
+
+function readFile(file) {
+  const fr = new FileReader();
+  fr.onload = () => {
+    try { loadGraph(JSON.parse(fr.result), null); }
+    catch (e) { S.msg = e.message; setTab("overview"); }
+  };
+  fr.readAsText(file);
+}
+
+// ---------------------------------------------------------------- graph derivation
+function rebuild(fit) {
+  const E = S.edits;
+  const excluded = new Set(E.exclude);
+  const terminal = new Set(E.terminal);
+  const removed = new Set(E.remove.map(([p, d]) => p + ">" + d));
+  const nodes = S.base.filter((n) => !excluded.has(n.id)).map((n) => ({ ...n, category: E.categories[n.id] || n.category, terminal: n.terminal || terminal.has(n.id), parents: [], children: [] }));
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+  const add = (p, d) => {
+    const a = byId.get(p), b = byId.get(d);
+    if (!a || !b || p === d || removed.has(p + ">" + d) || a.children.includes(d)) return;
+    if (terminal.has(d)) return;
+    a.children.push(d); b.parents.push(p);
+  };
+  for (const [p, d] of S.baseEdges) add(p, d);
+  for (const [p, d] of E.add) add(p, d);
+
+  // Edits can strand nodes: hide anything that lost all its edges.
+  const hadEdges = new Set(S.baseEdges.flat());
+  let active = nodes.filter((n) => n.parents.length || n.children.length || !hadEdges.has(n.id) || n.seed);
+  if (S.isolate) {
+    const keep = new Set([S.isolate, ...closure(byId, S.isolate, "parents"), ...closure(byId, S.isolate, "children")]);
+    active = active.filter((n) => keep.has(n.id));
+  }
+  const activeIds = new Set(active.map((n) => n.id));
+  for (const n of active) { n.parents = n.parents.filter((x) => activeIds.has(x)); n.children = n.children.filter((x) => activeIds.has(x)); }
+  S.nodes = active;
+  S.byId = new Map(active.map((n) => [n.id, n]));
+
+  computeLevels();
+  computeClosureCounts();
+  const edited = E.exclude.length || E.terminal.length || E.add.length || E.remove.length || S.isolate;
+  const fileMetrics = !edited && active.every((n) => n.fileBc != null);
+  if (fileMetrics) for (const n of active) { n.bc = n.fileBc; n.pr = n.filePr ?? 0; }
+  else computeCentrality();
+  S.metricsSource = fileMetrics ? "file" : "browser";
+
+  const cats = new Map();
+  for (const n of active) cats.set(n.category, (cats.get(n.category) || 0) + 1);
+  S.categories = [...cats.entries()].sort((a, b) => b[1] - a[1]).map(([name, count], i, arr) => ({ name, count, hue: Math.round(i * 137.508 + 18) % 360 }));
+  S.catHue = new Map(S.categories.map((c) => [c.name, c.hue]));
+
+  computeRadii();
+  layout();
+  if (S.sel && !S.byId.has(S.sel)) S.sel = null;
+  refreshSelection();
+  if (fit) fitView();
+  try { localStorage.setItem(S.key, JSON.stringify(S.edits)); } catch (e) {}
+  updateEditCount();
+  renderLegend();
+  renderPanel();
+  draw();
+}
+
+function closure(byId, id, dir) {
+  const seen = new Set(); const stack = [id];
+  while (stack.length) for (const x of byId.get(stack.pop())?.[dir] || []) if (!seen.has(x)) { seen.add(x); stack.push(x); }
+  return seen;
+}
+
+function topo() {
+  const indeg = new Map(S.nodes.map((n) => [n.id, n.parents.length]));
+  const q = S.nodes.filter((n) => !n.parents.length).map((n) => n.id);
+  const order = [];
+  while (q.length) {
+    const id = q.shift(); order.push(id);
+    for (const c of S.byId.get(id).children) { indeg.set(c, indeg.get(c) - 1); if (!indeg.get(c)) q.push(c); }
+  }
+  if (order.length < S.nodes.length) {           // a cycle slipped in: append the rest, stable
+    const seen = new Set(order);
+    for (const n of S.nodes) if (!seen.has(n.id)) order.push(n.id);
+  }
+  return order;
+}
+
+function computeLevels() {
+  // Level = length of the longest path from any foundational (level 0) concept.
+  S.order = topo();
+  S.maxLevel = 0;
+  for (const id of S.order) {
+    const n = S.byId.get(id);
+    n.level = n.parents.reduce((m, p) => Math.max(m, (S.byId.get(p).level ?? -1) + 1), 0);
+    S.maxLevel = Math.max(S.maxLevel, n.level);
+  }
+}
+
+function computeClosureCounts() {
+  const idx = new Map(S.order.map((id, i) => [id, i]));
+  const W = Math.ceil(S.order.length / 32) || 1;
+  const pop = (a) => { let c = 0; for (let v of a) { v -= (v >>> 1) & 0x55555555; v = (v & 0x33333333) + ((v >>> 2) & 0x33333333); c += (((v + (v >>> 4)) & 0xf0f0f0f) * 0x1010101) >>> 24; } return c; };
+  const run = (seq, dir, key) => {
+    const sets = new Map();
+    for (const id of seq) {
+      const bits = new Uint32Array(W);
+      for (const x of S.byId.get(id)[dir]) {
+        const i = idx.get(x); bits[i >>> 5] |= 1 << (i & 31);
+        const o = sets.get(x); for (let w = 0; w < W; w++) bits[w] |= o[w];
+      }
+      sets.set(id, bits);
+      S.byId.get(id)[key] = pop(bits);
+    }
+  };
+  run([...S.order].reverse(), "children", "nDown");
+  run(S.order, "parents", "nUp");
+}
+
+function computeCentrality() {
+  // Brandes betweenness (directed, normalised by (n-1)(n-2)) and PageRank, in the browser.
+  const ids = S.nodes.map((n) => n.id), N = ids.length;
+  const ix = new Map(ids.map((id, i) => [id, i]));
+  const ch = ids.map((id) => S.byId.get(id).children.map((c) => ix.get(c)));
+  const bc = new Float64Array(N), sigma = new Float64Array(N), delta = new Float64Array(N), dist = new Int32Array(N);
+  const stack = new Int32Array(N), queue = new Int32Array(N);
+  const preds = Array.from({ length: N }, () => []);
+  for (let s = 0; s < N; s++) {
+    sigma.fill(0); dist.fill(-1); delta.fill(0);
+    for (const p of preds) p.length = 0;
+    sigma[s] = 1; dist[s] = 0;
+    let qh = 0, qt = 0, sp = 0; queue[qt++] = s;
+    while (qh < qt) {
+      const v = queue[qh++]; stack[sp++] = v;
+      for (const w of ch[v]) {
+        if (dist[w] < 0) { dist[w] = dist[v] + 1; queue[qt++] = w; }
+        if (dist[w] === dist[v] + 1) { sigma[w] += sigma[v]; preds[w].push(v); }
+      }
+    }
+    while (sp > 0) {
+      const w = stack[--sp];
+      for (const v of preds[w]) delta[v] += (sigma[v] / sigma[w]) * (1 + delta[w]);
+      if (w !== s) bc[w] += delta[w];
+    }
+  }
+  const scale = N > 2 ? 1 / ((N - 1) * (N - 2)) : 0;
+  let pr = new Float64Array(N).fill(1 / N);
+  for (let it = 0; it < 60; it++) {
+    let dangling = 0; for (let i = 0; i < N; i++) if (!ch[i].length) dangling += pr[i];
+    const next = new Float64Array(N).fill((1 - 0.85) / N + (0.85 * dangling) / N);
+    for (let i = 0; i < N; i++) for (const c of ch[i]) next[c] += (0.85 * pr[i]) / ch[i].length;
+    pr = next;
+  }
+  ids.forEach((id, i) => { const n = S.byId.get(id); n.bc = bc[i] * scale; n.pr = pr[i]; });
+}
+
+function metricOf(n, mode) {
+  if (mode === "betweenness") return n.bc || 0;
+  if (mode === "pagerank") return n.pr || 0;
+  if (mode === "descendants") return n.nDown || 0;
+  return 1;
+}
+
+function computeRadii() {
+  const mode = S.sizeMode;
+  let max = 0;
+  for (const n of S.nodes) max = Math.max(max, metricOf(n, mode));
+  for (const n of S.nodes) {
+    if (mode === "uniform" || !max) { n.r = 4; continue; }
+    const t = Math.sqrt(metricOf(n, mode) / max);
+    n.r = mode === "descendants" ? 2.6 + 9 * t : 2.4 + 15 * t;
+  }
+}
+
+// ---------------------------------------------------------------- layout
+// Horizontal strata: level 0 at the bottom. Within a stratum, nodes are ordered by
+// barycentre sweeps (fewer crossings), then nudged toward their neighbours.
+// Wide strata wrap onto several sub-rows so the whole graph keeps a readable shape.
+function layout() {
+  const levels = Array.from({ length: S.maxLevel + 1 }, () => []);
+  const catRank = new Map(S.categories.map((c, i) => [c.name, i]));
+  for (const n of S.nodes) levels[n.level].push(n);
+  for (const row of levels) row.sort((a, b) => catRank.get(a.category) - catRank.get(b.category) || b.nDown - a.nDown || a.label.localeCompare(b.label));
+  const GAP = 22;
+  const widest = Math.max(...levels.map((r) => r.length));
+  const targetW = Math.max(900, Math.min(widest * GAP, Math.sqrt(S.nodes.length) * 120));
+  const cap = Math.max(8, Math.floor(targetW / GAP));
+
+  const pos = (row) => row.forEach((n, i) => (n.ord = i / Math.max(1, row.length - 1)));
+  levels.forEach(pos);
+  const bary = (n, dir) => {
+    const ns = n[dir]; if (!ns.length) return n.ord;
+    let s = 0; for (const id of ns) s += S.byId.get(id).ord; return s / ns.length;
+  };
+  for (let it = 0; it < 6; it++) {
+    for (let l = 1; l < levels.length; l++) { levels[l].forEach((n) => (n.b = bary(n, "parents"))); levels[l].sort((a, b) => a.b - b.b); pos(levels[l]); }
+    for (let l = levels.length - 2; l >= 0; l--) { levels[l].forEach((n) => (n.b = 0.5 * bary(n, "children") + 0.5 * n.ord)); levels[l].sort((a, b) => a.b - b.b); pos(levels[l]); }
+  }
+
+  // Vertical placement: one band per level, sub-rows when a level is wider than `cap`.
+  const ROW = 34, BAND_PAD = 26;
+  let y = 0;
+  S.bands = [];
+  for (let l = 0; l < levels.length; l++) {
+    const row = levels[l];
+    const sub = Math.max(1, Math.ceil(row.length / cap));
+    const h = BAND_PAD * 2 + (sub - 1) * ROW;
+    S.bands.push({ level: l, y0: y - h, y1: y, count: row.length });
+    row.forEach((n, i) => { n.sub = i % sub; n.y = y - BAND_PAD - n.sub * ROW; });
+    y -= h;
+  }
+  // Horizontal placement per sub-row, relaxed toward neighbour positions.
+  const subrows = [];
+  for (const row of levels) {
+    const groups = new Map();
+    for (const n of row) { if (!groups.has(n.sub)) groups.set(n.sub, []); groups.get(n.sub).push(n); }
+    for (const g of groups.values()) subrows.push(g);
+  }
+  for (const g of subrows) {
+    const w = (g.length - 1) * GAP * (cap / Math.max(cap, g.length));
+    g.forEach((n, i) => (n.x = g.length > 1 ? -w / 2 + (i * w) / (g.length - 1) : 0));
+  }
+  for (let it = 0; it < 8; it++) {
+    for (const g of subrows) {
+      for (const n of g) {
+        const nb = [...n.parents, ...n.children];
+        n.tx = nb.length ? nb.reduce((s, id) => s + S.byId.get(id).x, 0) / nb.length : n.x;
+        n.tx = 0.5 * n.tx + 0.5 * n.x;
+      }
+      const gap = (i) => Math.max(GAP * 0.8, (g[i].r + g[i - 1].r) * 1.15 + 4);
+      for (let i = 0; i < g.length; i++) g[i].x = i ? Math.max(g[i].tx, g[i - 1].x + gap(i)) : g[i].tx;
+      for (let i = g.length - 2; i >= 0; i--) g[i].x = Math.min(g[i].x, g[i + 1].x - gap(i + 1));
+      const mean = g.reduce((s, n) => s + n.tx, 0) / g.length - g.reduce((s, n) => s + n.x, 0) / g.length;
+      for (const n of g) n.x += mean;
+    }
+  }
+  let x0 = Infinity, x1 = -Infinity;
+  for (const n of S.nodes) { x0 = Math.min(x0, n.x - n.r); x1 = Math.max(x1, n.x + n.r); }
+  S.bounds = { x0: x0 - 60, x1: x1 + 40, y0: y, y1: 0 };
+  if (S.mode === "3d") layout3d();
+}
+
+// ---------------------------------------------------------------- selection
+function refreshSelection() {
+  if (!S.sel) { S.up = S.down = null; return; }
+  S.up = closure(S.byId, S.sel, "parents");
+  S.down = closure(S.byId, S.sel, "children");
+}
+
+function select(id, center) {
+  S.sel = id;
+  refreshSelection();
+  try { history.replaceState(null, "", id ? "#n-" + id : location.pathname + location.search); } catch (e) {}
+  if (id && center) {
+    S.autoFit = false;
+    const n = S.byId.get(id);
+    if (S.mode === "3d") { focus3d(n); setTab("node"); draw(); return; }
+    const { w, h } = size();
+    S.view.k = Math.max(S.view.k, 1.1);
+    S.view.x = w / 2 - n.x * S.view.k;
+    S.view.y = h / 2 - n.y * S.view.k;
+  }
+  setTab(id ? "node" : S.tab === "node" ? "overview" : S.tab);
+  draw();
+}
+
+// ---------------------------------------------------------------- drawing
+const cv = $("cv"), ctx = cv.getContext("2d");
+let C = {};
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  for (const k of ["bg", "band", "panel", "ink", "muted", "line", "rule", "up", "down", "focus", "cat-l", "cat-s"]) C[k] = cs.getPropertyValue("--" + k).trim();
+  C.dark = cs.colorScheme === "dark" || C.bg.toLowerCase() === "#111614";
+}
+function size() { const r = cv.getBoundingClientRect(); return { w: r.width, h: r.height }; }
+function resize() {
+  const { w, h } = size(), d = devicePixelRatio || 1;
+  cv.width = Math.round(w * d); cv.height = Math.round(h * d);
+  if (S.autoFit) fitView(); else draw();
+}
+function fitView() {
+  if (S.mode === "3d") return fit3d();
+  if (!S.bounds) return;
+  const { w, h } = size();
+  const b = S.bounds, bw = b.x1 - b.x0, bh = b.y1 - b.y0;
+  const k = Math.min(w / bw, h / bh) * 0.94;
+  S.view.k = Math.max(0.03, Math.min(k, 1.3));
+  S.autoFit = true;
+  S.view.x = w / 2 - ((b.x0 + b.x1) / 2) * S.view.k;
+  S.view.y = h / 2 - ((b.y0 + b.y1) / 2) * S.view.k;
+  draw();
+}
+
+function hslOf(n) {
+  if (S.colorMode === "level") return seqHsl(S.maxLevel ? n.level / S.maxLevel : 0);
+  if (S.colorMode === "betweenness") return seqHsl(Math.sqrt((n.bc || 0) / (S.maxBc || 1)));
+  return [S.catHue.get(n.category) ?? 180, parseFloat(C["cat-s"]), parseFloat(C["cat-l"])];
+}
+function colorOf(n) { const [h, s, l] = hslOf(n); return `hsl(${h} ${s}% ${l}%)`; }
+function seqHsl(t) {
+  // One-hue sequential ramp (low = faint, high = strong) that works on both grounds.
+  return [210 - 190 * t, 45 + 35 * t, C.dark ? 30 + 45 * t : 82 - 50 * t];
+}
+function seq(t) { const [h, s, l] = seqHsl(t); return `hsl(${h} ${s}% ${l}%)`; }
+
+let raf = 0;
+function draw() { if (!raf) raf = requestAnimationFrame(paint); }
+function paint() {
+  raf = 0;
+  if (S.mode === "3d") return paint3d();
+  const { w, h } = size(), d = devicePixelRatio || 1, { x: tx, y: ty, k } = S.view;
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.fillStyle = C.bg; ctx.fillRect(0, 0, w, h);
+  if (!S.nodes.length) return;
+  S.maxBc = S.nodes.reduce((m, n) => Math.max(m, n.bc || 0), 0);
+
+  // strata
+  for (const b of S.bands) {
+    const y0 = b.y0 * k + ty, y1 = b.y1 * k + ty;
+    if (y1 < 0 || y0 > h) continue;
+    if (b.level % 2 === 0) { ctx.fillStyle = C.band; ctx.fillRect(0, y0, w, y1 - y0); }
+    if (S.levelFocus === b.level) { ctx.fillStyle = C.focus; ctx.globalAlpha = 0.08; ctx.fillRect(0, y0, w, y1 - y0); ctx.globalAlpha = 1; }
+  }
+
+  const hidden = (n) => S.hiddenCats.has(n.category);
+  const inSel = (id) => id === S.sel || (S.showUp && S.up?.has(id)) || (S.showDown && S.down?.has(id));
+  const hov = S.hover && !S.sel ? S.byId.get(S.hover) : null;
+
+  ctx.setTransform(d * k, 0, 0, d * k, d * tx, d * ty);
+  const curve = (a, b) => {
+    const my = (a.y + b.y) / 2;
+    ctx.moveTo(a.x, a.y); ctx.bezierCurveTo(a.x, my, b.x, my, b.x, b.y);
+  };
+  // background edges
+  ctx.lineWidth = 1 / k;
+  ctx.strokeStyle = C.line;
+  ctx.globalAlpha = S.sel || hov ? 0.05 : S.nodes.length > 800 ? 0.1 : 0.22;
+  ctx.beginPath();
+  for (const n of S.nodes) if (!hidden(n)) for (const c of n.children) { const m = S.byId.get(c); if (!hidden(m)) curve(n, m); }
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+  // highlighted edges
+  const strokeSet = (set, color, test) => {
+    ctx.strokeStyle = color; ctx.lineWidth = 1.6 / Math.sqrt(k); ctx.globalAlpha = 0.85; ctx.beginPath();
+    for (const id of set) { const n = S.byId.get(id); for (const c of n.children) if (test(c)) curve(n, S.byId.get(c)); }
+    ctx.stroke(); ctx.globalAlpha = 1;
+  };
+  if (S.sel) {
+    if (S.showUp) strokeSet([...S.up], C.up, (c) => c === S.sel || S.up.has(c));
+    if (S.showDown) strokeSet([S.sel, ...S.down], C.down, (c) => S.down.has(c));
+  } else if (hov) {
+    strokeSet(hov.parents, C.up, (c) => c === hov.id);
+    strokeSet([hov.id], C.down, () => true);
+  }
+
+  // nodes
+  for (const n of S.nodes) {
+    if (hidden(n)) continue;
+    const dim = (S.sel && !inSel(n.id)) || (S.levelFocus != null && n.level !== S.levelFocus);
+    ctx.globalAlpha = dim ? 0.13 : 1;
+    ctx.beginPath(); ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+    if (!n.expanded && !n.terminal) {
+      ctx.fillStyle = C.bg; ctx.fill(); ctx.setLineDash([2 / k, 2 / k]); ctx.strokeStyle = colorOf(n); ctx.lineWidth = 1.4 / k; ctx.stroke(); ctx.setLineDash([]);
+    } else { ctx.fillStyle = colorOf(n); ctx.fill(); }
+    if (S.sel && n.id !== S.sel && !dim) {
+      ctx.lineWidth = 1.5 / k; ctx.strokeStyle = S.up?.has(n.id) ? C.up : C.down; ctx.stroke();
+    }
+  }
+  ctx.globalAlpha = 1;
+  const ring = (n, color) => { ctx.beginPath(); ctx.arc(n.x, n.y, n.r + 3 / k, 0, Math.PI * 2); ctx.lineWidth = 2.2 / k; ctx.strokeStyle = color; ctx.stroke(); };
+  if (S.sel) ring(S.byId.get(S.sel), C.ink);
+  if (S.hover && S.byId.has(S.hover)) ring(S.byId.get(S.hover), C.focus);
+
+  // labels, screen space, greedy collision avoidance
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.textBaseline = "middle";
+  const boxes = [];
+  const hit = (b) => boxes.some((o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0);
+  let cands;
+  if (S.sel) cands = S.nodes.filter((n) => inSel(n.id));
+  else if (S.levelFocus != null) cands = S.nodes.filter((n) => n.level === S.levelFocus);
+  else cands = S.nodes;
+  cands = cands.filter((n) => !hidden(n)).sort((a, b) => (b.id === S.sel) - (a.id === S.sel) || b.r - a.r);
+  const budget = S.sel || S.levelFocus != null ? 400 : 160;
+  let drawn = 0;
+  for (const n of cands) {
+    if (drawn >= budget) break;
+    const sx = n.x * k + tx, sy = n.y * k + ty;
+    if (sx < -100 || sx > w + 100 || sy < -20 || sy > h + 20) continue;
+    if (!S.sel && S.levelFocus == null && n.r * k < 2.4 && k < 1.6) continue;
+    const big = n.id === S.sel || n.r * k > 9;
+    ctx.font = `${big ? 600 : 400} ${big ? 13 : 11.5}px ${getComputedStyle(document.body).fontFamily}`;
+    const tw = ctx.measureText(n.label).width;
+    const lx = sx + n.r * k + 4;
+    const box = { x0: lx - 2, x1: lx + tw + 2, y0: sy - 8, y1: sy + 8 };
+    if (n.id !== S.sel && hit(box)) continue;
+    boxes.push(box);
+    ctx.lineWidth = 3.5; ctx.strokeStyle = C.bg; ctx.lineJoin = "round"; ctx.strokeText(n.label, lx, sy);
+    ctx.fillStyle = C.ink; ctx.fillText(n.label, lx, sy);
+    drawn++;
+  }
+
+  // level axis
+  ctx.font = `600 11px ${getComputedStyle(document.documentElement).getPropertyValue("--mono")}`;
+  for (const b of S.bands) {
+    const y0 = b.y0 * k + ty, y1 = b.y1 * k + ty;
+    if (y1 < 0 || y0 > h || y1 - y0 < 13) continue;
+    const label = b.level === 0 ? `L0 · foundations` : `L${b.level}`;
+    const yy = Math.min(Math.max((y0 + y1) / 2, 10), h - 10);
+    ctx.lineWidth = 3; ctx.strokeStyle = C.bg; ctx.strokeText(label, 8, yy);
+    ctx.fillStyle = C.muted; ctx.fillText(label, 8, yy);
+  }
+}
+
+// ---------------------------------------------------------------- interaction
+const stage = $("stage"), tip = $("tip");
+const pointers = new Map();
+let drag = null, moved = false;
+function worldAt(sx, sy) { return { x: (sx - S.view.x) / S.view.k, y: (sy - S.view.y) / S.view.k }; }
+function nodeAt(sx, sy) {
+  if (S.mode === "3d") return pick3d(sx, sy);
+  const p = worldAt(sx, sy);
+  let best = null, bd = Infinity;
+  for (const n of S.nodes) {
+    if (S.hiddenCats.has(n.category)) continue;
+    const dx = n.x - p.x, dy = n.y - p.y, dd = Math.sqrt(dx * dx + dy * dy);
+    if (dd < n.r + 5 / S.view.k && dd < bd) { bd = dd; best = n; }
+  }
+  return best;
+}
+function local(e) { const r = stage.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
+stage.addEventListener("pointerdown", (e) => {
+  stage.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, local(e));
+  moved = false;
+  if (pointers.size === 1) drag = { ...local(e), lx: local(e).x, ly: local(e).y, pan: e.button === 2 || e.shiftKey, vx: S.view.x, vy: S.view.y };
+  else if (pointers.size === 2) { const [a, b] = [...pointers.values()]; drag = { pinch: Math.hypot(a.x - b.x, a.y - b.y), k: S.view.k, dist: G.dist, mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2, vx: S.view.x, vy: S.view.y }; }
+});
+stage.addEventListener("pointermove", (e) => {
+  const p = local(e);
+  if (pointers.has(e.pointerId)) pointers.set(e.pointerId, p);
+  if (drag && pointers.size === 2 && drag.pinch) {
+    const [a, b] = [...pointers.values()];
+    if (S.mode === "3d") {
+      const span = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      G.dist = Math.max(40, (drag.dist * drag.pinch) / Math.max(1, span));
+      orbit(mx - drag.mx, my - drag.my, true); drag.mx = mx; drag.my = my;
+      moved = true; return;
+    }
+    const k = Math.max(0.02, Math.min(8, (drag.k * Math.hypot(a.x - b.x, a.y - b.y)) / drag.pinch));
+    S.view.x = drag.cx - ((drag.cx - drag.vx) * k) / drag.k; S.view.y = drag.cy - ((drag.cy - drag.vy) * k) / drag.k; S.view.k = k;
+    moved = true; S.autoFit = false; draw(); return;
+  }
+  if (drag && pointers.size === 1) {
+    const dx = p.x - drag.x, dy = p.y - drag.y;
+    if (Math.abs(dx) + Math.abs(dy) > 3) { moved = true; stage.classList.add("dragging"); }
+    if (moved && S.mode === "3d") { orbit(p.x - drag.lx, p.y - drag.ly, drag.pan || e.shiftKey); drag.lx = p.x; drag.ly = p.y; tip.hidden = true; return; }
+    if (moved) { S.autoFit = false; S.view.x = drag.vx + dx; S.view.y = drag.vy + dy; tip.hidden = true; draw(); }
+    return;
+  }
+  const n = nodeAt(p.x, p.y);
+  const id = n ? n.id : null;
+  if (id !== S.hover) { S.hover = id; draw(); }
+  if (n) {
+    tip.hidden = false;
+    tip.innerHTML = `<b>${esc(n.label)}</b><span>L${n.level} · ${esc(n.category)} · ${n.nUp} prereqs · ${n.nDown} dependents</span><span>Double-click to open on Wikipedia</span>`;
+    const { w } = size();
+    tip.style.left = Math.min(p.x + 14, w - 290) + "px"; tip.style.top = p.y + 14 + "px";
+  } else tip.hidden = true;
+});
+const endPointer = (e) => {
+  const p = local(e);
+  if (pointers.size === 1 && !moved && e.type === "pointerup") {
+    const n = nodeAt(p.x, p.y);
+    if (n && n.id !== S.sel) select(n.id, false);
+    else if (S.sel || S.levelFocus != null) { S.levelFocus = null; select(null); }
+  }
+  pointers.delete(e.pointerId);
+  if (!pointers.size) { drag = null; stage.classList.remove("dragging"); }
+};
+stage.addEventListener("pointerup", endPointer);
+stage.addEventListener("pointercancel", endPointer);
+stage.addEventListener("pointerleave", () => { if (S.hover) { S.hover = null; draw(); } tip.hidden = true; });
+stage.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  S.autoFit = false;
+  if (S.mode === "3d") { dolly(Math.exp(e.deltaY * (e.ctrlKey ? 0.01 : 0.0018))); return; }
+  const p = local(e);
+  const k = Math.max(0.02, Math.min(8, S.view.k * Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.0018))));
+  S.view.x = p.x - ((p.x - S.view.x) * k) / S.view.k; S.view.y = p.y - ((p.y - S.view.y) * k) / S.view.k; S.view.k = k;
+  draw();
+}, { passive: false });
+
+// search
+const q = $("q"), results = $("results");
+let hits = [], hitIx = 0;
+function runSearch() {
+  const s = q.value.trim().toLowerCase();
+  if (!s) { results.hidden = true; return; }
+  hits = S.nodes.filter((n) => n.label.toLowerCase().includes(s))
+    .sort((a, b) => a.label.toLowerCase().indexOf(s) - b.label.toLowerCase().indexOf(s) || b.nDown - a.nDown).slice(0, 12);
+  hitIx = 0;
+  results.hidden = !hits.length && !s;
+  results.innerHTML = hits.length ? hits.map((n, i) => `<button data-id="${n.id}" class="${i === hitIx ? "active" : ""}"><span>${esc(n.label)}</span><small>L${n.level}</small></button>`).join("") : `<div class="item empty">No concept matches “${esc(q.value)}”</div>`;
+}
+q.addEventListener("input", runSearch);
+q.addEventListener("keydown", (e) => {
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); hitIx = (hitIx + (e.key === "ArrowDown" ? 1 : hits.length - 1)) % Math.max(1, hits.length); [...results.children].forEach((b, i) => b.classList?.toggle("active", i === hitIx)); }
+  if (e.key === "Enter" && hits[hitIx]) { select(hits[hitIx].id, true); results.hidden = true; q.blur(); }
+  if (e.key === "Escape") { q.value = ""; results.hidden = true; q.blur(); }
+});
+results.addEventListener("click", (e) => { const b = e.target.closest("button[data-id]"); if (b) { select(b.dataset.id, true); results.hidden = true; } });
+document.addEventListener("click", (e) => { if (!e.target.closest(".search")) results.hidden = true; });
+document.addEventListener("keydown", (e) => {
+  if (e.target.matches("input, textarea, select")) return;
+  if (e.key === "/") { e.preventDefault(); q.focus(); }
+  if (e.key === "f" || e.key === "F") fitView();
+  if (e.key === "3") setMode("3d");
+  if (e.key === "2") setMode("2d");
+  if (e.key === "Escape") { if (!$("tune").hidden) { openTune(false); return; } S.levelFocus = null; select(null); }
+});
+
+$("sizeMode").addEventListener("change", (e) => { S.sizeMode = e.target.value; computeRadii(); layout(); draw(); });
+$("colorMode").addEventListener("change", (e) => { S.colorMode = e.target.value; renderLegend(); draw(); });
+$("fit").addEventListener("click", fitView);
+$("openBtn").addEventListener("click", () => $("file").click());
+$("file").addEventListener("change", (e) => { if (e.target.files[0]) readFile(e.target.files[0]); e.target.value = ""; });
+let dragDepth = 0;
+addEventListener("dragenter", (e) => { if ([...e.dataTransfer.types].includes("Files")) { dragDepth++; $("drop").hidden = false; } });
+addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; $("drop").hidden = true; } });
+addEventListener("dragover", (e) => e.preventDefault());
+addEventListener("drop", (e) => { e.preventDefault(); dragDepth = 0; $("drop").hidden = true; const f = e.dataTransfer.files[0]; if (f) readFile(f); });
+document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => setTab(b.dataset.tab)));
+
+// ---------------------------------------------------------------- panel
+function setTab(t) {
+  S.tab = t;
+  document.querySelectorAll(".tabs button").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.tab === t)));
+  renderPanel();
+}
+function chip(n) { return `<span class="chip"><span class="sw" style="background:${colorOfCat(n.category)}"></span>${esc(n.category)}</span>`; }
+function colorOfCat(c) { return `hsl(${S.catHue?.get(c) ?? 180} ${C["cat-s"]} ${C["cat-l"]})`; }
+function wikiUrl(n) {
+  if (n.url) return n.url;
+  const host = /^[a-z-]+\.wikipedia\.org$/.test(S.meta.source || "") ? S.meta.source : "en.wikipedia.org";
+  return `https://${host}/wiki/Special:Search?search=${encodeURIComponent(n.title || n.label)}`;
+}
+function wk(n) { return `<a class="wk" href="${esc(wikiUrl(n))}" target="_blank" rel="noopener" title="Open ${esc(n.label)} on Wikipedia" aria-label="Open ${esc(n.label)} on Wikipedia">W↗</a>`; }
+function item(n, extra = "", num = "") {
+  return `<div class="itemrow"><button class="item" data-go="${n.id}"><span class="n">${num}</span><span class="lbl">${esc(n.label)}</span><span class="val">${extra}</span></button>${wk(n)}</div>`;
+}
+
+function renderPanel() {
+  const pane = $("pane");
+  if (!S.nodes.length && !S.base.length) return;
+  if (S.tab === "node" && S.sel) pane.innerHTML = nodePanel(S.byId.get(S.sel));
+  else if (S.tab === "node") pane.innerHTML = `<h2>No concept selected</h2><p class="muted">Click a node, or search for a concept, to trace its prerequisites and dependents.</p>`;
+  else if (S.tab === "review") pane.innerHTML = reviewPanel();
+  else pane.innerHTML = overviewPanel();
+}
+
+function overviewPanel() {
+  const N = S.nodes, E = N.reduce((s, n) => s + n.children.length, 0);
+  const roots = N.filter((n) => n.level === 0);
+  const trueRoots = roots.filter((n) => n.expanded || n.terminal);
+  const stubs = roots.filter((n) => !n.expanded && !n.terminal);
+  const pillars = [...N].sort((a, b) => (b.bc || 0) - (a.bc || 0)).slice(0, 12);
+  const maxBc = pillars[0]?.bc || 1;
+  const maxCount = Math.max(...S.bands.map((b) => b.count));
+  const metaBits = [];
+  if (S.meta.source) metaBits.push(S.meta.source_url ? `<a href="${esc(S.meta.source_url)}" target="_blank" rel="noopener">${esc(S.meta.source)}</a>` : esc(S.meta.source));
+  if (S.meta.built) metaBits.push("built " + esc(S.meta.built.slice(0, 10)));
+  if (S.meta.budget_hit) metaBits.push("node budget reached");
+  return `
+  ${S.msg ? `<p class="msg">${esc(S.msg)}</p>` : ""}
+  <div><h2>${esc(S.name)}</h2>${metaBits.length ? `<p class="muted" style="margin-top:6px;font-size:13px">${metaBits.join(" · ")}</p>` : ""}</div>
+  <div class="stats">
+    <div class="stat"><b>${N.length}</b><span>concepts</span></div>
+    <div class="stat"><b>${E}</b><span>prerequisite edges</span></div>
+    <div class="stat"><b>${S.maxLevel + 1}</b><span>levels</span></div>
+    <div class="stat"><b>${trueRoots.length}</b><span>foundations</span></div>
+  </div>
+  <section>
+    <h3>Foundations <span class="mono">level 0</span></h3>
+    <p class="muted" style="font-size:13px;margin-bottom:8px">Concepts with no prerequisites inside this graph. Everything else is built on top of them.</p>
+    <div class="row">${trueRoots.slice(0, 40).map((n) => `<button class="mini" data-go="${n.id}">${esc(n.label)}</button>`).join("") || '<span class="empty">None</span>'}</div>
+    ${stubs.length ? `<p class="muted" style="font-size:12px;margin-top:8px">${stubs.length} more level-0 concepts were not expanded (dashed outline) because the crawl budget ran out before reaching them. They are not true foundations.</p>` : ""}
+  </section>
+  <section>
+    <h3>Strata <span class="mono">concepts per level</span></h3>
+    <p class="muted" style="font-size:13px;margin-bottom:8px">A concept's level is the length of the longest prerequisite chain beneath it. Click a level to highlight it.</p>
+    <div class="strata">${S.bands.map((b) => `<button class="stratum ${S.levelFocus === b.level ? "on" : ""}" data-level="${b.level}"><span>L${b.level}</span><i style="width:${(100 * b.count) / maxCount}%"></i><span>${b.count}</span></button>`).join("")}</div>
+  </section>
+  <section>
+    <h3>Pillars <span class="mono">betweenness centrality</span></h3>
+    <p class="muted" style="font-size:13px;margin-bottom:8px">How unavoidable a concept is: the share of shortest prerequisite paths between other concepts that pass through it.</p>
+    <div class="formula">C<sub>B</sub>(v) = Σ<sub>s≠v≠t</sub> σ<sub>st</sub>(v) / σ<sub>st</sub></div>
+    <div class="list" style="margin-top:8px">${pillars.map((n, i) => `${item(n, fmt(n.bc, 4), i + 1)}<span class="bar" style="width:${(100 * (n.bc || 0)) / maxBc}%;margin:-2px 4px 4px 3.6ch"></span>`).join("")}</div>
+    <div class="row" style="margin-top:10px">
+      <button class="mini" id="spineBtn">${S.sizeMode === "betweenness" ? "Size by dependents" : "Size nodes by betweenness"}</button>
+      <span class="muted" style="font-size:12px">${S.metricsSource === "file" ? "Computed by the builder on the full graph." : "Computed in your browser on the graph as shown."}</span>
+    </div>
+  </section>
+  <section>
+    <h3>Categories</h3>
+    <div class="row">${S.categories.slice(0, 24).map((c) => `<span class="chip"><span class="sw" style="background:${colorOfCat(c.name)}"></span>${esc(c.name)} <span class="mono muted">${c.count}</span></span>`).join("")}</div>
+  </section>`;
+}
+
+function nodePanel(n) {
+  const rankBc = [...S.nodes].sort((a, b) => (b.bc || 0) - (a.bc || 0)).findIndex((x) => x.id === n.id) + 1;
+  const parents = n.parents.map((id) => S.byId.get(id)).sort((a, b) => b.level - a.level);
+  const children = n.children.map((id) => S.byId.get(id)).sort((a, b) => a.level - b.level || a.label.localeCompare(b.label));
+  const path = [...S.up].map((id) => S.byId.get(id)).sort((a, b) => a.level - b.level || a.label.localeCompare(b.label));
+  const status = n.terminal ? "Terminal: kept but never expanded" : !n.expanded ? "Not expanded: the crawl budget ran out before this concept" : n.seed ? "Seed concept" : "";
+  const def = n.definition || n.long || n.description;
+  return `
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <h2>${esc(n.label)}</h2>
+    <div class="row">${chip(n)}<span class="chip mono">L${n.level}</span>${status ? `<span class="chip">${esc(status)}</span>` : ""}</div>
+    ${n.description ? `<p class="muted">${esc(n.description)}</p>` : ""}
+  </div>
+  ${def ? `<p>${tex(def)}</p>` : ""}
+  <a class="wikibtn" href="${esc(wikiUrl(n))}" target="_blank" rel="noopener">${n.url ? "Read on Wikipedia" : "Search Wikipedia"} ↗</a>
+  <div class="stats">
+    <div class="stat"><b>${n.nUp}</b><span>prerequisites (all)</span></div>
+    <div class="stat"><b>${n.nDown}</b><span>dependents (all)</span></div>
+    <div class="stat"><b class="mono" style="font-size:17px">${fmt(n.bc, 4)}</b><span>betweenness</span></div>
+    <div class="stat"><b>#${rankBc}</b><span>most central</span></div>
+  </div>
+  <div class="toggle">
+    <button class="up" id="tUp" aria-pressed="${S.showUp}">Prerequisites</button>
+    <button class="down" id="tDown" aria-pressed="${S.showDown}">Dependents</button>
+    <button class="iso" id="tIso" aria-pressed="${S.isolate === n.id}">${S.isolate === n.id ? "Show all" : "Isolate"}</button>
+  </div>
+  <section>
+    <h3>Builds directly on <span class="mono">${parents.length}</span></h3>
+    <div class="list">${parents.map((p) => `<div style="display:flex;align-items:center">${item(p, "L" + p.level)}<button class="edge-x" title="Remove this prerequisite edge" data-rm="${p.id}>${n.id}">×</button></div>`).join("") || '<p class="empty">Nothing: this is a foundation.</p>'}</div>
+    <div class="row" style="margin-top:6px">
+      <input id="addPre" list="allLabels" placeholder="Add a prerequisite…" style="flex:1;min-width:0;padding:4px 8px;border-radius:5px;border:1px solid var(--rule);background:var(--bg)">
+      <button class="mini" id="addPreBtn">Add</button>
+      <datalist id="allLabels">${S.nodes.map((x) => `<option value="${esc(x.label)}">`).join("")}</datalist>
+    </div>
+  </section>
+  <section>
+    <h3>Directly supports <span class="mono">${children.length}</span></h3>
+    <div class="list">${children.slice(0, 60).map((c) => `<div style="display:flex;align-items:center">${item(c, "L" + c.level)}<button class="edge-x" title="Remove this edge" data-rm="${n.id}>${c.id}">×</button></div>`).join("") || '<p class="empty">Nothing yet: a frontier concept.</p>'}${children.length > 60 ? `<p class="muted">+${children.length - 60} more</p>` : ""}</div>
+  </section>
+  <section>
+    <h3>Learning path <span class="mono">${path.length} steps</span></h3>
+    <p class="muted" style="font-size:13px;margin-bottom:8px">Every prerequisite of ${esc(n.label)}, foundations first. Each step only needs the steps above it.</p>
+    <div class="list">${path.slice(0, 250).map((p, i) => item(p, "L" + p.level, i + 1)).join("") || '<p class="empty">No prerequisites.</p>'}${path.length > 250 ? `<p class="muted">+${path.length - 250} more</p>` : ""}</div>
+  </section>
+  <section class="callout">
+    <h3 style="margin:0">Curate this concept</h3>
+    <div class="row">
+      <button class="mini" id="exBtn">Exclude from graph</button>
+      <button class="mini" id="termBtn" ${n.terminal ? "disabled" : ""}>Mark as foundation (terminal)</button>
+      ${!n.expanded && !n.terminal ? `<button class="mini" id="expandBtn">Expand on next build</button>` : ""}
+    </div>
+    <div class="row">
+      <input id="catIn" list="catList" value="${esc(n.category)}" style="flex:1;min-width:0;padding:4px 8px;border-radius:5px;border:1px solid var(--rule);background:var(--bg)" aria-label="Category">
+      <datalist id="catList">${S.categories.map((c) => `<option value="${esc(c.name)}">`).join("")}</datalist>
+      <button class="mini" id="catBtn">Set category</button>
+    </div>
+    ${S.msg ? `<p class="msg">${esc(S.msg)}</p>` : ""}
+  </section>`;
+}
+
+function titleOf(id) { const n = S.base.find((x) => x.id === id); return n ? n.title || n.label : id; }
+function idOfTitle(t) { const n = S.base.find((x) => (x.title || x.label) === t); return n ? n.id : null; }
+function curationJSON() {
+  const E = S.edits;
+  const out = {};
+  if (E.exclude.length) out.exclude = E.exclude.map(titleOf);
+  if (E.include.length) out.include = E.include;
+  if (E.terminal.length) out.terminal = E.terminal.map(titleOf);
+  if (E.seeds.length) out.seeds = E.seeds;
+  if (E.add.length) out.add_edges = E.add.map(([p, d]) => [titleOf(p), titleOf(d)]);
+  if (E.remove.length) out.remove_edges = E.remove.map(([p, d]) => [titleOf(p), titleOf(d)]);
+  if (Object.keys(E.categories).length) out.categories = Object.fromEntries(Object.entries(E.categories).map(([id, c]) => [titleOf(id), c]));
+  return JSON.stringify(out, null, 2);
+}
+function editTotal() { const E = S.edits; return E.exclude.length + E.include.length + E.terminal.length + E.seeds.length + E.add.length + E.remove.length + Object.keys(E.categories).length; }
+function updateEditCount() { const t = editTotal(); $("editCount").textContent = t ? `· ${t}` : ""; }
+
+function reviewPanel() {
+  const r = S.review;
+  const E = S.edits;
+  const sections = [];
+  sections.push(`
+  <div><h2>Review and curate</h2><p class="muted" style="margin-top:6px">Edits apply to the view right away. Save them as <code class="tex">curation.json</code> next to the builder and rebuild; cached pages make the rebuild quick.</p></div>
+  <section class="callout">
+    <h3 style="margin:0">Your edits <span class="mono">${editTotal()}</span></h3>
+    ${editTotal() ? `<textarea id="curOut" readonly>${esc(curationJSON())}</textarea>
+    <div class="row"><button class="mini" id="copyCur">Copy curation.json</button><button class="mini" id="undoCur">Undo last</button><button class="mini" id="clearCur">Clear all</button></div>`
+    : `<p class="empty">No edits yet. Use the × next to an edge, or the curate buttons on a concept.</p>`}
+    ${S.msg ? `<p class="msg">${esc(S.msg)}</p>` : ""}
+  </section>`);
+  if (!r) {
+    sections.push(`<p class="muted">This file has no build review. Graphs from <code class="tex">wikigraph.py build</code> list dropped cycle edges, very generic concepts and filtered links here.</p>`);
+    return sections.join("");
+  }
+  const has = (t) => !!idOfTitle(t);
+  if (r.cycle_edges_removed?.length) sections.push(`
+  <section>
+    <h3>Cycles broken <span class="mono">${r.cycle_edges_removed.length}</span></h3>
+    <p class="muted" style="font-size:13px;margin-bottom:8px">Wikipedia articles often cite each other. The builder kept the direction from the more widely cited concept. Restore an edge if the other direction is right.</p>
+    <div class="list">${r.cycle_edges_removed.slice(0, 80).map(([p, d]) => {
+      const pi = idOfTitle(p), di = idOfTitle(d);
+      const done = E.add.some(([a, b]) => a === pi && b === di);
+      return `<div class="item" style="cursor:default"><span class="n"></span><span class="lbl" title="${esc(p)} → ${esc(d)}">${esc(p)} → ${esc(d)}</span><button class="mini" data-flip="${esc(pi)}>${esc(di)}" ${!pi || !di || done ? "disabled" : ""}>${done ? "Restored" : "Restore"}</button></div>`;
+    }).join("")}</div>
+  </section>`);
+  if (r.possible_hubs?.length) sections.push(`
+  <section>
+    <h3>Very generic concepts <span class="mono">${r.possible_hubs.length}</span></h3>
+    <p class="muted" style="font-size:13px;margin-bottom:8px">Cited by a large share of pages. Some are true foundations; others are too broad to be useful.</p>
+    <div class="list">${r.possible_hubs.map(([t, c]) => {
+      const id = idOfTitle(t);
+      return `<div class="item" style="cursor:default"><span class="n mono">${c}</span><span class="lbl">${esc(t)}</span><span class="row"><button class="mini" data-ex="${esc(id)}" ${!id || E.exclude.includes(id) ? "disabled" : ""}>Exclude</button><button class="mini" data-term="${esc(id)}" ${!id || E.terminal.includes(id) ? "disabled" : ""}>Terminal</button></span></div>`;
+    }).join("")}</div>
+  </section>`);
+  if (r.filtered?.length) sections.push(`
+  <section>
+    <h3>Filtered links <span class="mono">${Object.values(r.filtered_counts || {}).reduce((a, b) => a + b, 0)}</span></h3>
+    <p class="muted" style="font-size:13px;margin-bottom:8px">Pages the filters treated as people, places, fields, lists and so on. These are the ones cited by two or more concepts. Include any that is a real concept; it is crawled on the next build.</p>
+    <div class="list">${r.filtered.slice(0, 120).map((f) => `<div class="item" style="cursor:default"><span class="n mono">${f.count}</span><span class="lbl" title="cited by ${esc(f.cited_by.join(", "))}">${esc(f.title)} <span class="muted">· ${esc(f.reason)}</span></span><button class="mini" data-inc="${esc(f.title)}" ${E.include.includes(f.title) ? "disabled" : ""}>${E.include.includes(f.title) ? "Included" : "Include"}</button></div>`).join("")}</div>
+  </section>`);
+  if (r.unexpanded_kept?.length) sections.push(`
+  <section>
+    <h3>Not expanded <span class="mono">${r.unexpanded_kept.length}</span></h3>
+    <p class="muted" style="font-size:13px;margin-bottom:8px">Kept because several pages cite them, but the budget ran out before their own prerequisites were read. ${r.unexpanded_dropped || 0} concepts cited only once were dropped.</p>
+    <div class="row">${r.unexpanded_kept.slice(0, 80).map((t) => { const id = idOfTitle(t); return id ? `<button class="mini" data-go="${id}">${esc(t)}</button>` : ""; }).join("")}</div>
+  </section>`);
+  return sections.join("");
+}
+
+function edit(fn) { S.msg = ""; fn(S.edits); rebuild(false); }
+$("pane").addEventListener("click", (e) => {
+  const t = e.target.closest("button, [data-go]");
+  if (!t) return;
+  const n = S.sel && S.byId.get(S.sel);
+  const snap = () => { (S.history = S.history || []).push(JSON.stringify(S.edits)); };
+  if (t.dataset.go) { select(t.dataset.go, true); return; }
+  if (t.dataset.level) { const l = +t.dataset.level; S.levelFocus = S.levelFocus === l ? null : l; S.sel = null; refreshSelection(); renderPanel(); draw(); return; }
+  if (t.id === "spineBtn") { S.sizeMode = S.sizeMode === "betweenness" ? "descendants" : "betweenness"; $("sizeMode").value = S.sizeMode; computeRadii(); layout(); renderPanel(); draw(); return; }
+  if (t.id === "tUp") { S.showUp = !S.showUp; renderPanel(); draw(); return; }
+  if (t.id === "tDown") { S.showDown = !S.showDown; renderPanel(); draw(); return; }
+  if (t.id === "tIso") { S.isolate = S.isolate === S.sel ? null : S.sel; rebuild(true); return; }
+  if (t.dataset.rm) { snap(); const [p, d] = t.dataset.rm.split(">"); edit((E) => { E.add = E.add.filter(([a, b]) => !(a === p && b === d)); E.remove.push([p, d]); }); return; }
+  if (t.id === "addPreBtn" && n) {
+    const label = $("addPre").value.trim();
+    const p = S.nodes.find((x) => x.label === label);
+    if (!p) { S.msg = `No concept called “${label}” in this graph.`; renderPanel(); return; }
+    if (p.id === n.id || S.down.has(p.id)) { S.msg = `${p.label} already depends on ${n.label}, so adding it would create a cycle.`; renderPanel(); return; }
+    snap(); edit((E) => { E.remove = E.remove.filter(([a, b]) => !(a === p.id && b === n.id)); E.add.push([p.id, n.id]); }); return;
+  }
+  if (t.id === "exBtn" && n) { snap(); const id = n.id; S.sel = null; edit((E) => E.exclude.push(id)); setTab("review"); return; }
+  if (t.id === "termBtn" && n) { snap(); edit((E) => E.terminal.push(n.id)); return; }
+  if (t.id === "expandBtn" && n) { snap(); edit((E) => { const ti = n.title || n.label; if (!E.seeds.includes(ti)) E.seeds.push(ti); }); S.msg = "Added as a seed; it is expanded on the next build."; renderPanel(); return; }
+  if (t.id === "catBtn" && n) { const c = $("catIn").value.trim(); if (c) { snap(); edit((E) => (E.categories[n.id] = c)); } return; }
+  if (t.dataset.flip) {
+    const [p, d] = t.dataset.flip.split(">");
+    const direct = S.byId.get(d)?.children.includes(p);
+    const still = new Set(closure(S.byId, d, "children"));
+    if (direct) { still.clear(); for (const c of S.byId.get(d).children) if (c !== p) for (const x of [c, ...closure(S.byId, c, "children")]) still.add(x); }
+    if (still.has(p)) { S.msg = `${titleOf(d)} reaches ${titleOf(p)} through other concepts, so restoring this edge would create a cycle. Remove one of those edges first.`; renderPanel(); return; }
+    snap(); edit((E) => { if (direct) E.remove.push([d, p]); E.add.push([p, d]); }); return;
+  }
+  if (t.dataset.ex) { snap(); edit((E) => E.exclude.push(t.dataset.ex)); return; }
+  if (t.dataset.term) { snap(); edit((E) => E.terminal.push(t.dataset.term)); return; }
+  if (t.dataset.inc) { snap(); edit((E) => E.include.push(t.dataset.inc)); return; }
+  if (t.id === "copyCur") {
+    const txt = curationJSON();
+    navigator.clipboard?.writeText(txt).then(() => { t.textContent = "Copied"; }, () => { $("curOut").select(); t.textContent = "Press Ctrl+C to copy"; });
+    if (!navigator.clipboard) { $("curOut").select(); t.textContent = "Press Ctrl+C to copy"; }
+    return;
+  }
+  if (t.id === "undoCur") { const prev = S.history?.pop(); if (prev) { S.edits = JSON.parse(prev); rebuild(false); } else { S.msg = "Nothing left to undo in this session."; renderPanel(); } return; }
+  if (t.id === "clearCur") { if (t.dataset.armed) { S.history = []; S.edits = emptyEdits(); rebuild(false); } else { t.dataset.armed = "1"; t.textContent = "Click again to clear"; } return; }
+});
+
+function renderLegend() {
+  const L = $("legend");
+  if (S.colorMode === "category") {
+    L.innerHTML = S.categories.slice(0, 14).map((c) => `<button data-cat="${esc(c.name)}" class="${S.hiddenCats.has(c.name) ? "off" : ""}"><span class="sw" style="background:${colorOfCat(c.name)}"></span>${esc(c.name)}</button>`).join("")
+      + (S.categories.length > 14 ? `<span class="muted">+${S.categories.length - 14} more</span>` : "");
+  } else {
+    const stops = Array.from({ length: 6 }, (_, i) => seq(i / 5)).join(",");
+    const lo = S.colorMode === "level" ? "L0 foundations" : "low";
+    const hi = S.colorMode === "level" ? `L${S.maxLevel}` : "high betweenness";
+    L.innerHTML = `<span>${lo}<span class="ramp" style="background:linear-gradient(90deg,${stops})"></span>${hi}</span>`;
+  }
+  const iso = $("isoNote");
+  if (S.isolate) {
+    iso.hidden = false;
+    iso.innerHTML = `<span>Showing only <b>${esc(S.byId.get(S.isolate)?.label)}</b> with its prerequisites and dependents</span><button class="mini" id="isoOff">Show all</button>`;
+  } else iso.hidden = true;
+}
+$("legend").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-cat]"); if (!b) return;
+  const c = b.dataset.cat;
+  S.hiddenCats.has(c) ? S.hiddenCats.delete(c) : S.hiddenCats.add(c);
+  renderLegend(); draw();
+});
+$("isoNote").addEventListener("click", (e) => { if (e.target.id === "isoOff") { S.isolate = null; rebuild(true); } });
+
+// ---------------------------------------------------------------- 3D
+// Same strata, stacked: height is the level. Every category owns the same angular
+// wedge on every level, so a category reads as one vertical column of the solid.
+// Node sizes and level spacing follow the-palindrome/ml-knowledge-graph
+// (radius = clamp(2·log2(dependents + 1), 1.5, 6), 40 units between levels).
+const G = { theta: 0.7, phi: 1.05, dist: 1600, tx: 0, ty: 0, tz: 0, spin: !matchMedia("(prefers-reduced-motion: reduce)").matches, version: -1, levelR: [] };
+const FOV = 45;
+const P3_DEFAULTS = { levelGap: 94, nodeGap: 76, size: 2.7, cluster: 0.7, links: 0.65, sectorGap: 0.25, shape: "ring", edges: 0.2, labels: 70 };
+const P3_CONTROLS = [
+  { key: "levelGap", label: "Level spacing", min: 10, max: 140, step: 2, layout: true },
+  { key: "nodeGap", label: "Node spacing", min: 6, max: 90, step: 2, layout: true },
+  { key: "size", label: "Node size", min: 0.3, max: 3, step: 0.1, layout: true },
+  { key: "cluster", label: "Category clustering", min: 0, max: 1, step: 0.05, layout: true },
+  { key: "sectorGap", label: "Gap between categories", min: 0, max: 0.7, step: 0.05, layout: true },
+  { key: "links", label: "Pull along edges", min: 0, max: 1, step: 0.05, layout: true },
+  { key: "edges", label: "Edge visibility", min: 0, max: 1, step: 0.05 },
+  { key: "labels", label: "Labels shown", min: 0, max: 400, step: 10 },
+];
+let P3 = { ...P3_DEFAULTS };
+try { Object.assign(P3, JSON.parse(localStorage.getItem("wikigraph-3d-v3") || "{}")); } catch (e) {}
+
+function mulberry32(a) { return () => { a |= 0; a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
+
+function radius3() {
+  // descendant mode uses the reference formula; metric modes map min..max to 1.125..11.4 like the reference.
+  const mode = S.sizeMode;
+  let lo = Infinity, hi = -Infinity;
+  if (mode !== "descendants" && mode !== "uniform") for (const n of S.nodes) { const v = metricOf(n, mode); lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  for (const n of S.nodes) {
+    let r;
+    if (mode === "descendants") r = Math.min(6, Math.max(1.5, 2 * Math.log2(n.nDown + 1)));
+    else if (mode === "uniform") r = 3;
+    else r = 1.125 + (hi > lo ? (metricOf(n, mode) - lo) / (hi - lo) : 0) * (11.4 - 1.125);
+    n.r3 = r * P3.size;
+  }
+}
+
+function wrapAngle(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
+
+function layout3d() {
+  radius3();
+  const rnd = mulberry32(7);
+  const levels = Array.from({ length: S.maxLevel + 1 }, () => []);
+  for (const n of S.nodes) levels[n.level].push(n);
+  const total = S.nodes.length;
+
+  // Category wedges, shared by every level. Small categories get a minimum share so they stay visible.
+  const weight = new Map(S.categories.map((c) => [c.name, Math.max(c.count, total * 0.012)]));
+  const W = [...weight.values()].reduce((a, b) => a + b, 0);
+  const sector = new Map();
+  let acc = 0;
+  for (const c of S.categories) {
+    const width = (2 * Math.PI * weight.get(c.name)) / W;
+    sector.set(c.name, { mid: acc + width / 2 - Math.PI, half: (width * (1 - P3.sectorGap)) / 2 });
+    acc += width;
+  }
+
+  // Level radius from the room its nodes need.
+  const ring = P3.shape === "ring";
+  const need = (n) => P3.nodeGap + 2 * n.r3;
+  G.levelR = levels.map((row) => {
+    if (!row.length) return 20;
+    const fill = 1 - P3.sectorGap * 0.8;
+    if (ring) return Math.max(20, row.reduce((s, n) => s + need(n), 0) / (2 * Math.PI * fill));
+    return Math.max(20, Math.sqrt(row.reduce((s, n) => s + need(n) ** 2, 0) / (Math.PI * fill)) * 1.05);
+  });
+
+  // Category columns: each category is its own tower, placed around a circle with gaps between towers.
+  const columns = P3.shape === "columns";
+  const colR = new Map();      // category -> per-level radius
+  const colC = new Map();      // category -> {x, z}
+  if (columns) {
+    for (const c of S.categories) colR.set(c.name, levels.map(() => 0));
+    levels.forEach((row, l) => {
+      const sum = new Map();
+      for (const n of row) sum.set(n.category, (sum.get(n.category) || 0) + need(n) ** 2);
+      for (const [cat, a] of sum) colR.get(cat)[l] = Math.max(6, Math.sqrt(a / Math.PI) * 1.05);
+    });
+    const widest = new Map(S.categories.map((c) => [c.name, Math.max(...colR.get(c.name))]));
+    const pad = (w) => 2 * w * (1 + P3.sectorGap) + P3.nodeGap;
+    const circ = S.categories.reduce((s, c) => s + pad(widest.get(c.name)), 0);
+    const ringR = S.categories.length > 1 ? circ / (2 * Math.PI) : 0;
+    let a = -Math.PI;
+    for (const c of S.categories) {
+      const da = (2 * Math.PI * pad(widest.get(c.name))) / circ;
+      colC.set(c.name, { x: ringR * Math.cos(a + da / 2), z: ringR * Math.sin(a + da / 2) });
+      a += da;
+    }
+  }
+
+  // Seed positions: each category's nodes spread through its wedge or column, hub concepts toward the middle.
+  const yOff = (S.maxLevel * P3.levelGap) / 2;
+  levels.forEach((row, l) => {
+    const R = G.levelR[l];
+    const byCat = new Map();
+    for (const n of row) { if (!byCat.has(n.category)) byCat.set(n.category, []); byCat.get(n.category).push(n); }
+    for (const [cat, list] of byCat) {
+      const s = sector.get(cat);
+      list.sort((a, b) => b.nDown - a.nDown || a.label.localeCompare(b.label));
+      list.forEach((n, k) => {
+        const t = (k + 0.5) / list.length;
+        if (columns) {
+          const c = colC.get(cat), rr = colR.get(cat)[l] * Math.sqrt(t), ga = k * 2.39996;
+          n.x3 = c.x + rr * Math.cos(ga); n.z3 = c.z + rr * Math.sin(ga); n.y3 = l * P3.levelGap - yOff;
+          n.col = c; n.colR = colR.get(cat)[l]; n.sec = s;
+          return;
+        }
+        const a = s.mid + (((k * 0.6180339) % 1) * 2 - 1) * s.half * 0.9;
+        const rad = ring ? R : R * Math.sqrt(0.08 + 0.92 * t);
+        n.x3 = rad * Math.cos(a) + (rnd() - 0.5); n.z3 = rad * Math.sin(a) + (rnd() - 0.5);
+        n.y3 = l * P3.levelGap - yOff;
+        n.sec = s;
+      });
+    }
+  });
+
+  const ITER = 110;
+  const linkK = 0.04 * P3.links, clusterK = 0.25 * P3.cluster;
+  for (let it = 0; it < ITER; it++) {
+    const cool = 1 - it / ITER;
+    for (const n of S.nodes) { n.fx = 0; n.fz = 0; }
+    if (linkK) for (const n of S.nodes) for (const id of n.children) {
+      const m = S.byId.get(id), dx = m.x3 - n.x3, dz = m.z3 - n.z3;
+      n.fx += dx * linkK; n.fz += dz * linkK; m.fx -= dx * linkK; m.fz -= dz * linkK;
+    }
+    levels.forEach((row, l) => {
+      const R = G.levelR[l];
+      if (columns) for (const n of row) {
+        // stay in the category's tower: firm pull back once outside it, gentle pull toward its axis
+        const dx = n.col.x - n.x3, dz = n.col.z - n.z3, d = Math.hypot(dx, dz) || 1;
+        const k = (d > n.colR ? 0.5 : 0.03) * P3.cluster;
+        n.fx += dx * k * (d > n.colR ? (d - n.colR) / d : 1); n.fz += dz * k * (d > n.colR ? (d - n.colR) / d : 1);
+      }
+      else for (const n of row) {
+        const rad = Math.hypot(n.x3, n.z3) || 1, ang = Math.atan2(n.z3, n.x3);
+        // keep each node inside its category wedge
+        const off = wrapAngle(ang - n.sec.mid);
+        if (clusterK && Math.abs(off) > n.sec.half) {
+          const ta = n.sec.mid + Math.sign(off) * n.sec.half;
+          n.fx += (rad * Math.cos(ta) - n.x3) * clusterK; n.fz += (rad * Math.sin(ta) - n.z3) * clusterK;
+        }
+        // shape: on the rim for rings, inside the disc otherwise
+        const target = ring ? R : Math.min(rad, R);
+        n.fx += (n.x3 / rad) * (target - rad) * 0.15; n.fz += (n.z3 / rad) * (target - rad) * 0.15;
+      }
+      // spacing: nodes on the same level keep nodeGap between their surfaces
+      const cell = P3.nodeGap + 2 * 6 * P3.size * 2, grid = new Map();
+      for (const n of row) { const k = Math.floor(n.x3 / cell) + "," + Math.floor(n.z3 / cell); (grid.get(k) || grid.set(k, []).get(k)).push(n); }
+      for (const n of row) {
+        const cx = Math.floor(n.x3 / cell), cz = Math.floor(n.z3 / cell);
+        for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) for (const m of grid.get(cx + i + "," + (cz + j)) || []) {
+          if (m === n) continue;
+          let dx = n.x3 - m.x3, dz = n.z3 - m.z3, d = Math.hypot(dx, dz);
+          const min = P3.nodeGap + n.r3 + m.r3;
+          if (d >= min) continue;
+          if (d < 0.01) { dx = rnd() - 0.5; dz = rnd() - 0.5; d = Math.hypot(dx, dz); }
+          const push = ((min - d) / d) * 0.5;
+          n.fx += dx * push; n.fz += dz * push;
+        }
+      }
+    });
+    const step = 0.35 + 0.65 * cool;
+    for (const n of S.nodes) { n.x3 += n.fx * step; n.z3 += n.fz * step; }
+  }
+  G.levelR = levels.map((row) => row.reduce((m, n) => Math.max(m, Math.hypot(n.x3, n.z3) + n.r3), 20) + 12);
+  G.height = S.maxLevel * P3.levelGap;
+  S.layoutVersion = (S.layoutVersion || 0) + 1;
+}
+
+function g3init() {
+  if (G.renderer) return true;
+  if (!window.THREE) return false;
+  try {
+    G.renderer = new THREE.WebGLRenderer({ canvas: $("gl"), antialias: true });
+  } catch (e) { return false; }
+  G.renderer.setPixelRatio(devicePixelRatio || 1);
+  G.scene = new THREE.Scene();
+  G.camera = new THREE.PerspectiveCamera(FOV, 1, 1, 100000);
+  G.scene.add(new THREE.AmbientLight(0xffffff, 0.72));
+  G.light = new THREE.DirectionalLight(0xffffff, 0.5);
+  G.scene.add(G.light);
+  G.sphere = new THREE.SphereGeometry(1, 16, 12);
+  G.tmp = new THREE.Object3D(); G.col = new THREE.Color(); G.bgCol = new THREE.Color(); G.vec = new THREE.Vector3();
+  return true;
+}
+
+function g3build() {
+  for (const k of ["mesh", "edges", "hi", "rings"]) if (G[k]) { G.scene.remove(G[k]); G[k].traverse?.((o) => { o.geometry?.dispose(); o.material?.dispose(); }); }
+  const N = S.nodes.length;
+  G.mesh = new THREE.InstancedMesh(G.sphere, new THREE.MeshLambertMaterial({ color: 0xffffff }), Math.max(1, N));
+  G.mesh.count = N;
+  S.nodes.forEach((n, i) => { n.i3 = i; G.mesh.setColorAt(i, G.col.set(0xffffff)); });
+  G.scene.add(G.mesh);
+  const pos = [];
+  for (const n of S.nodes) for (const id of n.children) { const m = S.byId.get(id); pos.push(n.x3, n.y3, n.z3, m.x3, m.y3, m.z3); }
+  const eg = new THREE.BufferGeometry();
+  eg.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+  G.edges = new THREE.LineSegments(eg, new THREE.LineBasicMaterial({ transparent: true, depthWrite: false }));
+  G.scene.add(G.edges);
+  G.hi = new THREE.LineSegments(new THREE.BufferGeometry(), new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 }));
+  G.scene.add(G.hi);
+  G.rings = new THREE.Group();
+  G.levelR.forEach((R, l) => {
+    const pts = [];
+    for (let i = 0; i <= 96; i++) { const a = (i / 96) * Math.PI * 2; pts.push(new THREE.Vector3(R * Math.cos(a), l * P3.levelGap - G.height / 2, R * Math.sin(a))); }
+    G.rings.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(pts), new THREE.LineBasicMaterial({ transparent: true, depthWrite: false })));
+  });
+  G.scene.add(G.rings);
+  G.version = S.layoutVersion;
+  G.hiKey = null;
+}
+
+function fit3d() {
+  const R = Math.max(...G.levelR, 50), H = G.height || 100;
+  const { w, h } = size();
+  const aspect = w / Math.max(1, h), half = (FOV * Math.PI) / 360;
+  const needV = (H / 2 + R * 0.5) / Math.tan(half), needH = R / (Math.tan(half) * aspect);
+  G.dist = Math.max(needV, needH) * 1.08 + R;
+  G.tx = G.ty = G.tz = 0;
+  S.autoFit = true;
+  draw();
+}
+
+function focus3d(n) {
+  G.tx = n.x3; G.ty = n.y3; G.tz = n.z3;
+  G.dist = Math.min(G.dist, 700);
+  S.autoFit = false;
+}
+
+function orbit(dx, dy, pan) {
+  if (pan) {
+    const s = G.dist * 0.0012;
+    const rx = Math.cos(G.theta), rz = -Math.sin(G.theta);
+    G.tx -= dx * s * rx; G.tz -= dx * s * rz; G.ty += dy * s;
+  } else {
+    G.theta -= dx * 0.006;
+    G.phi = Math.max(0.08, Math.min(Math.PI - 0.08, G.phi - dy * 0.006));
+  }
+  S.autoFit = false;
+  draw();
+}
+
+function dolly(f) { G.dist = Math.max(40, Math.min(60000, G.dist * f)); draw(); }
+
+function hslToThree(c, [h, s, l]) { return c.setHSL((((h % 360) + 360) % 360) / 360, s / 100, l / 100); }
+
+function paint3d() {
+  const { w, h } = size(), d = devicePixelRatio || 1;
+  ctx.setTransform(d, 0, 0, d, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+  if (!S.nodes.length || !g3init()) return;
+  if (G.version !== S.layoutVersion) g3build();
+  if (G.spin && !drag) { G.theta += 0.0012; } if (G.spin) draw();
+  S.maxBc = S.nodes.reduce((m, n) => Math.max(m, n.bc || 0), 0);
+  const R = G.renderer;
+  if (R.domElement.width !== Math.round(w * d) || R.domElement.height !== Math.round(h * d)) R.setSize(w, h, false);
+  G.camera.aspect = w / Math.max(1, h);
+  G.camera.position.set(G.tx + G.dist * Math.sin(G.phi) * Math.sin(G.theta), G.ty + G.dist * Math.cos(G.phi), G.tz + G.dist * Math.sin(G.phi) * Math.cos(G.theta));
+  G.camera.lookAt(G.tx, G.ty, G.tz);
+  G.camera.far = G.dist * 4 + 5000;
+  G.camera.updateProjectionMatrix();
+  G.light.position.copy(G.camera.position).add(new THREE.Vector3(0, G.dist, 0));
+  G.bgCol.set(C.bg);
+  R.setClearColor(G.bgCol, 1);
+
+  const hidden = (n) => S.hiddenCats.has(n.category);
+  const inSel = (id) => id === S.sel || (S.showUp && S.up?.has(id)) || (S.showDown && S.down?.has(id));
+  const hov = S.hover && !S.sel ? S.byId.get(S.hover) : null;
+  for (const n of S.nodes) {
+    const dim = (S.sel && !inSel(n.id)) || (S.levelFocus != null && n.level !== S.levelFocus);
+    const sc = hidden(n) ? 0.0001 : n.r3 * (n.id === S.sel || n.id === S.hover ? 1.35 : 1);
+    G.tmp.position.set(n.x3, n.y3, n.z3); G.tmp.scale.setScalar(sc); G.tmp.updateMatrix();
+    G.mesh.setMatrixAt(n.i3, G.tmp.matrix);
+    hslToThree(G.col, hslOf(n));
+    if (!n.expanded && !n.terminal) G.col.lerp(G.bgCol, 0.55);
+    if (dim) G.col.lerp(G.bgCol, 0.86);
+    G.mesh.setColorAt(n.i3, G.col);
+  }
+  G.mesh.instanceMatrix.needsUpdate = true;
+  if (G.mesh.instanceColor) G.mesh.instanceColor.needsUpdate = true;
+  G.edges.material.color.set(C.line);
+  G.edges.material.opacity = (S.sel || hov ? 0.15 : 1) * P3.edges * (S.nodes.length > 800 ? 0.45 : 1);
+  G.rings.children.forEach((r, l) => { r.visible = P3.shape !== "columns" || S.levelFocus === l; r.material.color.set(S.levelFocus === l ? C.focus : C.line); r.material.opacity = S.levelFocus === l ? 0.9 : l === 0 ? 0.55 : 0.22; });
+
+  const key = [S.sel, hov?.id, S.showUp, S.showDown, S.layoutVersion, C.up, [...S.hiddenCats].join("|")].join(";");
+  if (key !== G.hiKey) {
+    G.hiKey = key;
+    const pos = [], col = [], cu = new THREE.Color(C.up), cd = new THREE.Color(C.down);
+    const seg = (a, b, c) => { if (hidden(a) || hidden(b)) return; pos.push(a.x3, a.y3, a.z3, b.x3, b.y3, b.z3); col.push(c.r, c.g, c.b, c.r, c.g, c.b); };
+    if (S.sel) {
+      const sel = S.byId.get(S.sel);
+      if (S.showUp) for (const id of S.up) { const n = S.byId.get(id); for (const c of n.children) if (c === S.sel || S.up.has(c)) seg(n, S.byId.get(c), cu); }
+      if (S.showDown) for (const n of [sel, ...[...S.down].map((x) => S.byId.get(x))]) for (const c of n.children) if (S.down.has(c)) seg(n, S.byId.get(c), cd);
+    } else if (hov) {
+      for (const p of hov.parents) seg(S.byId.get(p), hov, cu);
+      for (const c of hov.children) seg(hov, S.byId.get(c), cd);
+    }
+    G.hi.geometry.dispose();
+    G.hi.geometry = new THREE.BufferGeometry();
+    G.hi.geometry.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
+    G.hi.geometry.setAttribute("color", new THREE.Float32BufferAttribute(col, 3));
+  }
+  R.render(G.scene, G.camera);
+
+  // Project nodes for picking and labels.
+  const ppu = h / 2 / Math.tan((FOV * Math.PI) / 360);
+  for (const n of S.nodes) {
+    G.vec.set(n.x3, n.y3, n.z3);
+    const dist = G.vec.distanceTo(G.camera.position);
+    G.vec.project(G.camera);
+    n.vis = G.vec.z > -1 && G.vec.z < 1 && !hidden(n);
+    n.sx = ((G.vec.x + 1) / 2) * w; n.sy = ((1 - G.vec.y) / 2) * h; n.sd = dist; n.sr = (n.r3 * ppu) / dist;
+  }
+  ctx.textBaseline = "middle";
+  const boxes = [];
+  const hit = (b) => boxes.some((o) => b.x0 < o.x1 && b.x1 > o.x0 && b.y0 < o.y1 && b.y1 > o.y0);
+  let cands = S.sel ? S.nodes.filter((n) => inSel(n.id)) : S.levelFocus != null ? S.nodes.filter((n) => n.level === S.levelFocus) : S.nodes;
+  cands = cands.filter((n) => n.vis).sort((a, b) => (b.id === S.sel) - (a.id === S.sel) || (b.id === S.hover) - (a.id === S.hover) || b.sr - a.sr);
+  const budget = S.sel || S.levelFocus != null ? Math.max(300, P3.labels) : P3.labels;
+  const family = getComputedStyle(document.body).fontFamily;
+  let drawn = 0;
+  for (const n of cands) {
+    if (drawn >= budget) break;
+    if (n.sx < -100 || n.sx > w + 100 || n.sy < -20 || n.sy > h + 20) continue;
+    if (!S.sel && S.levelFocus == null && n.sr < 1.6 && n.id !== S.hover) continue;
+    const big = n.id === S.sel || n.sr > 8;
+    ctx.font = `${big ? 600 : 400} ${big ? 13 : 11.5}px ${family}`;
+    const tw = ctx.measureText(n.label).width, lx = n.sx + n.sr + 4;
+    const box = { x0: lx - 2, x1: lx + tw + 2, y0: n.sy - 8, y1: n.sy + 8 };
+    if (n.id !== S.sel && n.id !== S.hover && hit(box)) continue;
+    boxes.push(box);
+    ctx.lineWidth = 3.5; ctx.strokeStyle = C.bg; ctx.lineJoin = "round"; ctx.strokeText(n.label, lx, n.sy);
+    ctx.fillStyle = C.ink; ctx.fillText(n.label, lx, n.sy);
+    drawn++;
+  }
+  // Level tags at the edge of each ring nearest the viewer's left.
+  ctx.font = `600 11px ${getComputedStyle(document.documentElement).getPropertyValue("--mono")}`;
+  const lx = -Math.cos(G.theta), lz = Math.sin(G.theta);
+  G.levelR.forEach((Rl, l) => {
+    G.vec.set(lx * Rl, l * P3.levelGap - G.height / 2, lz * Rl).project(G.camera);
+    if (G.vec.z < -1 || G.vec.z > 1) return;
+    const sx = ((G.vec.x + 1) / 2) * w, sy = ((1 - G.vec.y) / 2) * h;
+    const label = l === 0 ? "L0 · foundations" : "L" + l;
+    const tw = ctx.measureText(label).width;
+    const box = { x0: sx - tw - 10, x1: sx - 4, y0: sy - 7, y1: sy + 7 };
+    if (hit(box)) return;
+    boxes.push(box);
+    ctx.lineWidth = 3; ctx.strokeStyle = C.bg; ctx.strokeText(label, box.x0, sy);
+    ctx.fillStyle = S.levelFocus === l ? C.focus : C.muted; ctx.fillText(label, box.x0, sy);
+  });
+}
+
+function pick3d(sx, sy) {
+  // A sphere under the pointer wins, front-most first; otherwise the nearest one within a few pixels.
+  let best = null, bd = Infinity, near = null, nd = Infinity;
+  for (const n of S.nodes) {
+    if (!n.vis) continue;
+    const dd = Math.hypot(n.sx - sx, n.sy - sy);
+    if (dd <= Math.max(n.sr, 1.5) && n.sd < bd) { bd = n.sd; best = n; }
+    if (dd < n.sr + 6 && dd - n.sr < nd) { nd = dd - n.sr; near = n; }
+  }
+  return best || near;
+}
+
+function setMode(m) {
+  if (m === "3d" && !g3init()) {
+    S.msg = "3D needs WebGL and the three.js library, and this browser could not start them. The 2D view still works.";
+    setTab("overview");
+    return;
+  }
+  S.mode = m;
+  $("m2d").setAttribute("aria-pressed", String(m === "2d"));
+  $("m3d").setAttribute("aria-pressed", String(m === "3d"));
+  $("gl").hidden = m !== "3d";
+  $("spin").hidden = m !== "3d";
+  $("tuneBtn").hidden = m !== "3d";
+  if (m !== "3d") openTune(false);
+  try { localStorage.setItem("wikigraph-mode", m); } catch (e) {}
+  if (m === "3d") { layout3d(); fit3d(); } else fitView();
+}
+$("m2d").addEventListener("click", () => setMode("2d"));
+$("m3d").addEventListener("click", () => setMode("3d"));
+$("spin").addEventListener("click", () => { G.spin = !G.spin; $("spin").setAttribute("aria-pressed", String(G.spin)); draw(); });
+// Layout tuning: a dropdown, closed unless asked for.
+function renderTune() {
+  const fmtv = (c, v) => (c.step < 1 ? (+v).toFixed(2) : String(v));
+  $("tune").innerHTML = `<h4>3D layout</h4>
+    ${P3_CONTROLS.map((c) => `<label class="ctl" for="p3-${c.key}"><span>${c.label}</span><output id="p3o-${c.key}">${fmtv(c, P3[c.key])}</output>
+      <input type="range" id="p3-${c.key}" data-key="${c.key}" min="${c.min}" max="${c.max}" step="${c.step}" value="${P3[c.key]}"></label>`).join("")}
+    <label class="ctl" for="p3-shape"><span>Level shape</span>
+      <select id="p3-shape" style="grid-column:1/-1;padding:5px 8px;border-radius:5px;border:1px solid var(--rule);background:var(--bg)">
+        <option value="columns" ${P3.shape === "columns" ? "selected" : ""}>Category columns</option>
+        <option value="disc" ${P3.shape === "disc" ? "selected" : ""}>Filled discs</option>
+        <option value="ring" ${P3.shape === "ring" ? "selected" : ""}>Rings (hollow column)</option>
+      </select></label>
+    <div class="row"><button class="mini" id="p3reset">Reset to defaults</button><button class="mini" id="p3copy">Copy settings</button></div>
+    <textarea id="p3text" readonly hidden style="min-height:120px"></textarea>`;
+}
+function openTune(open) {
+  $("tune").hidden = !open;
+  $("tuneBtn").setAttribute("aria-expanded", String(open));
+  if (open) renderTune();
+}
+function saveP3() { try { localStorage.setItem("wikigraph-3d-v3", JSON.stringify(P3)); } catch (e) {} }
+let relayoutTimer = 0;
+function relayout3d() {
+  clearTimeout(relayoutTimer);
+  relayoutTimer = setTimeout(() => { layout3d(); if (S.autoFit) fit3d(); else draw(); }, 120);
+}
+$("tuneBtn").addEventListener("click", (e) => { e.stopPropagation(); openTune($("tune").hidden); });
+document.addEventListener("pointerdown", (e) => { if (!$("tune").hidden && !e.target.closest(".tune-wrap")) openTune(false); });
+$("tune").addEventListener("input", (e) => {
+  const key = e.target.dataset.key;
+  if (!key) return;
+  const c = P3_CONTROLS.find((x) => x.key === key);
+  P3[key] = +e.target.value;
+  $("p3o-" + key).textContent = c.step < 1 ? P3[key].toFixed(2) : String(P3[key]);
+  saveP3();
+  if (c.layout) relayout3d(); else draw();
+});
+$("tune").addEventListener("keydown", (e) => { if (e.key === "Escape") { openTune(false); $("tuneBtn").focus(); } });
+$("tune").addEventListener("change", (e) => {
+  if (e.target.id === "p3-shape") { P3.shape = e.target.value; saveP3(); relayout3d(); }
+});
+$("tune").addEventListener("click", (e) => {
+  if (e.target.id === "p3reset") { P3 = { ...P3_DEFAULTS }; saveP3(); renderTune(); relayout3d(); }
+  if (e.target.id === "p3copy") {
+    const txt = JSON.stringify(P3), ta = $("p3text");
+    ta.value = txt; ta.hidden = false;
+    navigator.clipboard?.writeText(txt).then(() => { e.target.textContent = "Copied"; }, () => { ta.select(); e.target.textContent = "Press Ctrl+C to copy"; });
+  }
+});
+stage.addEventListener("dblclick", (e) => {
+  const p = local(e), n = nodeAt(p.x, p.y);
+  if (n) window.open(wikiUrl(n), "_blank", "noopener");
+});
+stage.addEventListener("contextmenu", (e) => { if (S.mode === "3d") e.preventDefault(); });
+
+// ---------------------------------------------------------------- boot
+readColors();
+new ResizeObserver(resize).observe(stage);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { readColors(); renderLegend(); renderPanel(); draw(); });
+new MutationObserver(() => { readColors(); renderLegend(); renderPanel(); draw(); }).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+document.fonts?.ready.then(draw);
+resize();
+// 3D is the default view; a viewer who picked 2D keeps it.
+loadSample().then(() => { let m = "3d"; try { m = localStorage.getItem("wikigraph-mode") || "3d"; } catch (e) {} if (m === "3d") setMode("3d"); });
+</script>

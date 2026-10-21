@@ -1,0 +1,11 @@
+{
+  "notes": "Copy to curation.json. Titles are Wikipedia article titles. The Review tab in explorer.html writes this file for you.",
+  "exclude": ["Mathematics", "Computer science"],
+  "include": ["Hill climbing"],
+  "terminal": ["Real number"],
+  "seeds": ["Backpropagation"],
+  "merge": {"Artificial neural network": "Neural network (machine learning)"},
+  "add_edges": [["Gradient", "Gradient descent"]],
+  "remove_edges": [["Statistics", "Linear regression"]],
+  "categories": {"Gradient descent": "Optimization"}
+}

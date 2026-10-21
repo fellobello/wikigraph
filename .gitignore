@@ -1,0 +1,7 @@
+# Builder's Wikipedia response cache
+.wikigraph-cache/
+__pycache__/
+*.pyc
+.DS_Store
+# Source archive
+wikigraph.zip
