@@ -35,16 +35,20 @@ The builder needs only Python 3.9+ and network access to `*.wikipedia.org`.
 `topic.py` builds a topic if it isn't built yet, then serves the folder and opens the explorer on it:
 
 ```
-python3 topic.py "Cybernetics"
+python3 topic.py "Game theory"
 ```
 
 - Graphs are saved as `graphs/<slug>.json` (ignored by git). Running the same topic again opens it instantly.
 - The explorer's **Topic** menu lists every topic you've built, so you can switch without the terminal.
   The menu only appears when the explorer runs locally.
+- Several seed articles can be saved as one named topic. Seeds can also live in the topic's curation
+  file. For example:
+  `python3 topic.py --name "Multi-agent systems" "Multi-agent system" "Game theory" "Swarm intelligence"`.
+  Reopen it later with `python3 topic.py --name "Multi-agent systems"`.
 - `python3 topic.py --list` lists built topics. `python3 topic.py` with no topic just opens the explorer.
 - Each topic has its own curation file, `graphs/<slug>.curation.json`. Save the Review tab's output
-  there, then run `python3 topic.py "Cybernetics" --rebuild`.
-- Options after `--` go to the builder, for example `python3 topic.py "Cybernetics" --rebuild -- --max-nodes 600`.
+  there, then run `python3 topic.py "Game theory" --rebuild`.
+- Options after `--` go to the builder, for example `python3 topic.py "Game theory" --rebuild -- --max-nodes 600`.
 - The Wikipedia User-Agent contact defaults to this repository's URL. Set `WIKIGRAPH_CONTACT` or
   `--contact` to use your own.
 

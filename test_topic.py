@@ -18,6 +18,8 @@ class TopicTests(unittest.TestCase):
             old, topic.GRAPHS = topic.GRAPHS, Path(d)
             try:
                 g = {"meta": {"topics": ["Cybernetics"]}, "nodes": [{"id": "a"}, {"id": "b"}]}
+                named = {"meta": {"topics": ["Game theory", "Boids"], "name": "Multi-agent systems"}, "nodes": []}
+                (Path(d) / "multi-agent-systems.json").write_text(json.dumps(named))
                 (Path(d) / "cybernetics.json").write_text(json.dumps(g))
                 (Path(d) / "cybernetics.curation.json").write_text("{}")
                 (Path(d) / "bare.json").write_text(json.dumps([{"id": "x"}]))
@@ -27,6 +29,7 @@ class TopicTests(unittest.TestCase):
         self.assertEqual(idx, [
             {"file": "graphs/bare.json", "topic": "bare", "nodes": 1},
             {"file": "graphs/cybernetics.json", "topic": "Cybernetics", "nodes": 2},
+            {"file": "graphs/multi-agent-systems.json", "topic": "Multi-agent systems", "nodes": 0},
         ])
 
 
