@@ -828,7 +828,7 @@ document.addEventListener("click", (e) => { if (!e.target.closest(".search")) re
 document.addEventListener("keydown", (e) => {
   if (e.target.matches("input, textarea, select")) return;
   if (e.key === "/") { e.preventDefault(); q.focus(); }
-  if (e.key === "f" || e.key === "F") fitView();
+  if (e.key === "f" || e.key === "F") { G.closeUp = false; fitView(); }
   if (e.key === "3") setMode("3d");
   if (e.key === "2") setMode("2d");
   if (e.key === "Escape") { if (!$("tune").hidden) { openTune(false); return; } S.levelFocus = null; select(null); }
@@ -836,7 +836,7 @@ document.addEventListener("keydown", (e) => {
 
 $("sizeMode").addEventListener("change", (e) => { S.sizeMode = e.target.value; computeRadii(); layout(); draw(); });
 $("colorMode").addEventListener("change", (e) => { S.colorMode = e.target.value; renderLegend(); draw(); });
-$("fit").addEventListener("click", fitView);
+$("fit").addEventListener("click", () => { G.closeUp = false; fitView(); });
 $("openBtn").addEventListener("click", () => $("file").click());
 $("file").addEventListener("change", (e) => { if (e.target.files[0]) readFile(e.target.files[0]); e.target.value = ""; });
 let dragDepth = 0;
@@ -1125,7 +1125,7 @@ $("isoNote").addEventListener("click", (e) => { if (e.target.id === "isoOff") { 
 // wedge on every level, so a category reads as one vertical column of the solid.
 // Node sizes and level spacing follow the-palindrome/ml-knowledge-graph
 // (radius = clamp(2·log2(dependents + 1), 1.5, 6), 40 units between levels).
-const G = { theta: 0.7, phi: 1.05, dist: 1600, tx: 0, ty: 0, tz: 0, spin: !matchMedia("(prefers-reduced-motion: reduce)").matches, version: -1, levelR: [] };
+const G = { theta: 0.7, phi: 1.05, dist: 1600, closeUp: true, tx: 0, ty: 0, tz: 0, spin: !matchMedia("(prefers-reduced-motion: reduce)").matches, version: -1, levelR: [] };
 const FOV = 45;
 const P3_DEFAULTS = { levelGap: 94, nodeGap: 76, size: 2.7, cluster: 0.7, links: 0.65, sectorGap: 0.25, shape: "ring", edges: 0.2, labels: 70 };
 const P3_CONTROLS = [
@@ -1338,6 +1338,8 @@ function fit3d() {
   const aspect = w / Math.max(1, h), half = (FOV * Math.PI) / 360;
   const needV = (H / 2 + R * 0.5) / Math.tan(half), needH = R / (Math.tan(half) * aspect);
   G.dist = Math.max(needV, needH) * 1.08 + R;
+  // Opens at half the fit distance, close to the spinning graph; pressing F shows all of it.
+  if (G.closeUp) G.dist *= 0.5;
   G.tx = G.ty = G.tz = 0;
   S.autoFit = true;
   draw();
@@ -1362,7 +1364,7 @@ function orbit(dx, dy, pan) {
   draw();
 }
 
-function dolly(f) { G.dist = Math.max(40, Math.min(60000, G.dist * f)); draw(); }
+function dolly(f) { G.closeUp = false; G.dist = Math.max(40, Math.min(60000, G.dist * f)); draw(); }
 
 function hslToThree(c, [h, s, l]) { return c.setHSL((((h % 360) + 360) % 360) / 360, s / 100, l / 100); }
 
