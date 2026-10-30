@@ -210,6 +210,8 @@ a { color: var(--focus); }
     <div class="results" id="results" hidden></div>
   </div>
   <div class="tools">
+    <label id="topicWrap" hidden><span>Topic</span>
+      <select id="topic" aria-label="Topic"></select></label>
     <label><span>Size</span>
       <select id="sizeMode" aria-label="Node size">
         <option value="descendants">Dependents</option>
@@ -305,9 +307,33 @@ function loadGraph(raw, name) {
   else setTab("overview");
 }
 
-async function loadSample() {
+// ?graph=<file.json> picks which graph to open; topic.py links here with it.
+function graphParam() {
+  const g = new URLSearchParams(location.search).get("graph");
+  return g && /^[\w./-]+\.json$/.test(g) && !g.includes("..") ? g : null;
+}
+
+// Locally, topic.py keeps graphs/index.json listing every topic built so far.
+async function loadTopics(current) {
+  if (!/^(localhost|127\.0\.0\.1|\[::1\])$/.test(location.hostname)) return;
   try {
-    const r = await fetch("sample-ml.json");
+    const r = await fetch("graphs/index.json", { cache: "no-store" });
+    if (!r.ok) return;
+    const list = await r.json();
+    const sel = $("topic");
+    sel.innerHTML = `<option value="sample-ml.json">Machine learning (sample)</option>` +
+      list.map(t => `<option value="${esc(t.file)}">${esc(t.topic)} · ${t.nodes}</option>`).join("");
+    sel.value = current;
+    sel.addEventListener("change", () => { location.search = new URLSearchParams({ graph: sel.value }); });
+    $("topicWrap").hidden = false;
+  } catch (e) {}
+}
+
+async function loadSample() {
+  const src = graphParam() || "sample-ml.json";
+  loadTopics(src);
+  try {
+    const r = await fetch(src);
     if (!r.ok) throw new Error(r.status);
     loadGraph(await r.json());
   } catch (e) {
